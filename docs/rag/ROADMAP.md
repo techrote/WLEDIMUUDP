@@ -76,23 +76,34 @@ WU-002 and WU-003 are conceptually separable after WU-001, but the issue sequenc
 
 ## WU-001 — Repository bootstrap and Audio Sync V2 protocol substrate
 
+**Issue:** #1  
+**Implementation PR:** #8  
+**Status:** implementation complete and automated gate green on the PR branch; accepted only after the exact documented head is merged to `main` and issue #1 closes.
+
 ### Goal
 
 Create the build/test foundation and exact host-testable WLED Audio Sync V2 encoder before any real IMU integration.
 
-### Deliverables
+### Delivered implementation
 
-- PlatformIO/C++ repository structure with native-test and reference ESP32-S3 environments;
-- pure protocol data model and explicit 44-byte encoder;
-- reference decoder used by tests/tools;
-- exact golden packet fixtures and malformed-input tests;
-- formatting and CI workflow;
-- secrets-safe configuration skeleton;
-- initial build/run/test documentation.
+- PlatformIO/C++17 repository structure with native-test and generic ESP32-S3 compile/smoke environments;
+- portable `WledImuUdpCore` protocol library;
+- semantic `SyntheticAudioFrame` separated from exact 44-byte wire packet;
+- explicit little-endian Audio Sync V2 encoder with deterministic sanitisation;
+- strict reference decoder for tests/later tools;
+- directly reviewable exact golden packet fixture and malformed-input tests;
+- pinned clang-format and PlatformIO development dependencies;
+- CI workflow: formatting → native protocol tests → ESP32-S3 build;
+- secret-safe Wi-Fi configuration template for later transport work;
+- README bootstrap/build/test commands and locked WU-001 implementation contract.
+
+### Automated evidence
+
+The implementation head passed all 10 native protocol tests and the ESP32-S3 reference firmware build. Physical stock-WLED interoperability and live IMU behavior remain explicitly outside WU-001’s evidence boundary.
 
 ### Exit condition
 
-A clean checkout can run native protocol tests and compile a minimal reference firmware without credentials or hardware.
+A clean checkout can run native protocol tests and compile a minimal reference firmware without credentials or hardware. Final acceptance additionally requires merge verification on `main` and issue #1 closure.
 
 ---
 
