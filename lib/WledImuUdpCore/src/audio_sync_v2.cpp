@@ -39,7 +39,7 @@ std::uint8_t sanitize_band(std::uint16_t value) noexcept {
   return static_cast<std::uint8_t>(std::min<std::uint16_t>(value, 254U));
 }
 
-void write_float_le(AudioSyncV2Packet& packet, std::size_t offset, float value) noexcept {
+void write_float_le(AudioSyncV2Packet &packet, std::size_t offset, float value) noexcept {
   std::uint32_t bits = 0;
   std::memcpy(&bits, &value, sizeof(bits));
   packet[offset] = static_cast<std::uint8_t>(bits & 0xFFU);
@@ -48,7 +48,7 @@ void write_float_le(AudioSyncV2Packet& packet, std::size_t offset, float value) 
   packet[offset + 3] = static_cast<std::uint8_t>((bits >> 24U) & 0xFFU);
 }
 
-float read_float_le(const std::uint8_t* data, std::size_t offset) noexcept {
+float read_float_le(const std::uint8_t *data, std::size_t offset) noexcept {
   const std::uint32_t bits = static_cast<std::uint32_t>(data[offset]) |
                              (static_cast<std::uint32_t>(data[offset + 1]) << 8U) |
                              (static_cast<std::uint32_t>(data[offset + 2]) << 16U) |
@@ -58,18 +58,17 @@ float read_float_le(const std::uint8_t* data, std::size_t offset) noexcept {
   return value;
 }
 
-bool header_matches(const std::uint8_t* data) noexcept {
+bool header_matches(const std::uint8_t *data) noexcept {
   return std::equal(kAudioSyncV2Header.begin(), kAudioSyncV2Header.end(), data);
 }
 
-bool reserved_bytes_are_zero(const std::uint8_t* data) noexcept {
-  return data[6] == 0U && data[7] == 0U && data[17] == 0U && data[34] == 0U &&
-         data[35] == 0U;
+bool reserved_bytes_are_zero(const std::uint8_t *data) noexcept {
+  return data[6] == 0U && data[7] == 0U && data[17] == 0U && data[34] == 0U && data[35] == 0U;
 }
 
-}  // namespace
+} // namespace
 
-AudioSyncV2Packet encode_audio_sync_v2(const SyntheticAudioFrame& frame) noexcept {
+AudioSyncV2Packet encode_audio_sync_v2(const SyntheticAudioFrame &frame) noexcept {
   AudioSyncV2Packet packet{};
   std::copy(kAudioSyncV2Header.begin(), kAudioSyncV2Header.end(), packet.begin());
 
@@ -86,7 +85,7 @@ AudioSyncV2Packet encode_audio_sync_v2(const SyntheticAudioFrame& frame) noexcep
   return packet;
 }
 
-DecodeResult decode_audio_sync_v2(const std::uint8_t* data, std::size_t size) noexcept {
+DecodeResult decode_audio_sync_v2(const std::uint8_t *data, std::size_t size) noexcept {
   DecodeResult result{};
   if (data == nullptr) {
     result.error = DecodeError::kNullData;
@@ -127,4 +126,4 @@ DecodeResult decode_audio_sync_v2(const std::uint8_t* data, std::size_t size) no
   return result;
 }
 
-}  // namespace wledimuudp::protocol
+} // namespace wledimuudp::protocol

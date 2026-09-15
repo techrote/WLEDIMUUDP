@@ -10,12 +10,12 @@
 #include "golden_fixture.hpp"
 
 using wledimuudp::protocol::AudioSyncV2Packet;
-using wledimuudp::protocol::DecodeError;
-using wledimuudp::protocol::SyntheticAudioFrame;
 using wledimuudp::protocol::decode_audio_sync_v2;
+using wledimuudp::protocol::DecodeError;
 using wledimuudp::protocol::encode_audio_sync_v2;
 using wledimuudp::protocol::kAudioSyncV2Header;
 using wledimuudp::protocol::kAudioSyncV2PacketSize;
+using wledimuudp::protocol::SyntheticAudioFrame;
 using wledimuudp::test_fixture::kGoldenAudioSyncV2Packet;
 
 namespace {
@@ -36,7 +36,8 @@ SyntheticAudioFrame make_golden_frame() {
 void test_encoded_size_header_and_reserved_bytes() {
   const AudioSyncV2Packet packet = encode_audio_sync_v2(make_golden_frame());
   TEST_ASSERT_EQUAL_UINT32(44U, packet.size());
-  TEST_ASSERT_EQUAL_UINT8_ARRAY(kAudioSyncV2Header.data(), packet.data(), kAudioSyncV2Header.size());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(kAudioSyncV2Header.data(), packet.data(),
+                                kAudioSyncV2Header.size());
   TEST_ASSERT_EQUAL_UINT8(0U, packet[6]);
   TEST_ASSERT_EQUAL_UINT8(0U, packet[7]);
   TEST_ASSERT_EQUAL_UINT8(0U, packet[17]);
@@ -105,8 +106,8 @@ void test_repeated_encoding_is_deterministic() {
 }
 
 void test_decoder_round_trips_golden_packet() {
-  const auto decoded = decode_audio_sync_v2(kGoldenAudioSyncV2Packet.data(),
-                                            kGoldenAudioSyncV2Packet.size());
+  const auto decoded =
+      decode_audio_sync_v2(kGoldenAudioSyncV2Packet.data(), kGoldenAudioSyncV2Packet.size());
   TEST_ASSERT_TRUE(decoded.ok());
   TEST_ASSERT_FLOAT_WITHIN(0.0001F, 1.0F, decoded.frame.sample_raw);
   TEST_ASSERT_FLOAT_WITHIN(0.0001F, 2.5F, decoded.frame.sample_smoothed);
@@ -156,7 +157,7 @@ void test_decoder_rejects_non_finite_and_invalid_major_peak() {
                           static_cast<std::uint8_t>(decode_audio_sync_v2(packet).error));
 }
 
-}  // namespace
+} // namespace
 
 void setUp() {}
 void tearDown() {}

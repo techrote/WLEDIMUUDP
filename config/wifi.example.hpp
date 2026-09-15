@@ -8,4 +8,4 @@ namespace wledimuudp::config {
 inline constexpr char kWifiSsid[] = "CHANGE_ME";
 inline constexpr char kWifiPassword[] = "CHANGE_ME";
 
-}  // namespace wledimuudp::config
+} // namespace wledimuudp::config

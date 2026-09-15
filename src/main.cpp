@@ -2,9 +2,9 @@
 
 #include <wledimuudp/audio_sync_v2.hpp>
 
-using wledimuudp::protocol::SyntheticAudioFrame;
 using wledimuudp::protocol::encode_audio_sync_v2;
 using wledimuudp::protocol::kAudioSyncV2PacketSize;
+using wledimuudp::protocol::SyntheticAudioFrame;
 
 void setup() {
   Serial.begin(115200);
@@ -27,4 +27,6 @@ void setup() {
   Serial.println("No Wi-Fi, IMU, or LED path is enabled in WU-001.");
 }
 
-void loop() { delay(1000); }
+void loop() {
+  delay(1000);
+}
