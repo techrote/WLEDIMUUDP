@@ -43,7 +43,7 @@ Responsibilities:
 
 Must not depend on Arduino, Wi-Fi or a specific IMU.
 
-WU-001 concretely implements this boundary as the portable PlatformIO library `lib/WledImuUdpCore`. `SyntheticAudioFrame` is semantic state; `AudioSyncV2Packet` is the exact 44-byte wire representation. The protocol library contains no Arduino or network dependency. A strict decoder exists for tests and future host tooling but is not part of the sender hot path.
+WU-001 concretely implements this boundary as the portable PlatformIO library `lib/WledImuUdpCore`. `SyntheticAudioFrame` is semantic state; `AudioSyncV2Packet` is the exact 44-byte wire representation. The protocol library contains no Arduino or network dependency. A strict decoder exists for tests and host tooling but is not part of the sender hot path.
 
 ### `core/motion`
 
@@ -105,32 +105,36 @@ WU-001 supplies only a generic ESP32-S3 compile/smoke firmware that exercises pr
 
 ### `tools`
 
-Host utilities should include, in roadmap order:
+Host utilities are part of the compatibility strategy, not optional developer toys.
 
-- a known-pattern Audio Sync V2 sender;
-- a packet decoder/sniffer suitable for captured 44-byte payloads;
-- fixture generators/replayers for motion traces.
+WU-002 concretely implements this boundary as:
 
-These tools are part of the compatibility strategy, not optional developer toys.
+- `lib/WledImuUdpHost`: deterministic pattern generation, CLI parsing, exact packet hex conversion, IPv4 handling and a thin native UDP socket adapter;
+- `src/host_probe.cpp`: the native `host_probe` command with `send`, `listen` and `decode` modes;
+- the existing `WledImuUdpCore` remains the only Audio Sync serializer/decoder.
+
+The host layer depends on the protocol core; the protocol core does not depend on the host/network layer. `host_probe` is excluded from the ESP32-S3 source filter, so native socket code cannot leak into firmware.
+
+Later host tooling may add motion-trace fixture generators/replayers without changing this dependency direction.
 
 ## Timing model
 
-Initial planning baseline:
+Initial product baseline:
 
 - IMU acquisition: about 200 Hz where the hardware permits;
 - motion feature update: every IMU sample;
 - WLED synthetic-audio frame generation: 50 Hz baseline;
 - UDP send: one V2 packet per generated frame.
 
-These are defaults, not protocol requirements. Exact rates become implementation contracts only when locked by tests/docs. Core code must use elapsed monotonic time rather than assuming perfect scheduler cadence.
+WU-002 locks the host probe to `1..50 Hz`, default 50 Hz, following current WLED Sound Sync guidance not to exceed the approximately 20 ms external-sender cadence. Core code must use elapsed monotonic time rather than assuming perfect scheduler cadence.
 
 ## Determinism
 
 For an identical initial configuration and identical timestamped IMU trace, the motion feature and synthetic-audio outputs must be byte-for-byte repeatable on the host test target.
 
-WU-001 already enforces the first layer of this contract: repeated encoding of one semantic frame must produce identical 44-byte output, and a directly reviewable golden packet is checked byte-for-byte.
+WU-001 enforces deterministic encoding and a directly reviewable golden packet. WU-002 extends that contract: every named probe pattern is a pure function of `(pattern, frame_index)`, the 160-frame scripted sequence has locked order/cycle behavior, and tests verify the resulting packet equals the canonical WU-001 encoder output.
 
-Network timing, packet loss and Wi-Fi reconnect behavior are outside the deterministic signal-processing core.
+Network delivery/timing remains outside the deterministic signal-processing core. Localhost UDP is tested only for exact byte preservation across the transport seam.
 
 ## Configuration model
 
@@ -144,6 +148,8 @@ Configuration is expected to separate:
 
 Real credentials must never be committed. WU-001 provides `config/wifi.example.hpp` and ignores `config/wifi.local.hpp`; the example is intentionally unused by the protocol-smoke firmware until transport work begins.
 
+WU-002's host probe takes destination, port, packet rate and diagnostic limits from explicit CLI options. Those host options do not become firmware configuration implicitly.
+
 ## Failure behavior
 
 - Invalid/non-finite sensor values are rejected/sanitised before entering mapping logic.
@@ -151,10 +157,10 @@ Real credentials must never be committed. WU-001 provides `config/wifi.example.h
 - If Wi-Fi is lost, motion processing may continue but sends are skipped; reconnection must not reset calibration unless explicitly requested.
 - Stillness and sender shutdown must not leave WLED with a permanently asserted peak or non-decaying activity. The mapper therefore owns explicit decay-to-silence semantics.
 
-At the protocol boundary, WU-001 deterministically sanitises malformed semantic values before encoding and the reference decoder rejects malformed wire packets rather than propagating non-finite state.
+At the protocol boundary, WU-001 sanitises malformed semantic values before encoding and the strict decoder rejects malformed wire packets. WU-002 exposes those decoder errors through host tooling instead of coercing malformed captures into apparently valid frames. Socket/bind/send/receive failures are observable and return non-zero status.
 
 ## Resource posture
 
-The steady-state hot path should be fixed-size and allocation-free where practical. The protocol payload is 44 bytes; feature/mapping state should remain small enough that the reference ESP32-S3 target has ample headroom.
+The steady-state embedded hot path should be fixed-size and allocation-free where practical. The protocol payload is 44 bytes; feature/mapping state should remain small enough that the reference ESP32-S3 target has ample headroom.
 
-No part of the architecture assumes the sender has addressable LEDs.
+Native host tooling may use standard-library strings/vectors for diagnostics because it is not part of the embedded runtime. No part of the architecture assumes the sender has addressable LEDs.
