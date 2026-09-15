@@ -43,6 +43,8 @@ Responsibilities:
 
 Must not depend on Arduino, Wi-Fi or a specific IMU.
 
+WU-001 concretely implements this boundary as the portable PlatformIO library `lib/WledImuUdpCore`. `SyntheticAudioFrame` is semantic state; `AudioSyncV2Packet` is the exact 44-byte wire representation. The protocol library contains no Arduino or network dependency. A strict decoder exists for tests and future host tooling but is not part of the sender hot path.
+
 ### `core/motion`
 
 Responsibilities:
@@ -99,6 +101,8 @@ Responsibilities:
 - serial diagnostics/status;
 - no required LED output path.
 
+WU-001 supplies only a generic ESP32-S3 compile/smoke firmware that exercises protocol encoding and serial reporting. It intentionally does not join Wi-Fi, read an IMU or initialise LEDs; those platform responsibilities remain deferred to later milestones.
+
 ### `tools`
 
 Host utilities should include, in roadmap order:
@@ -124,6 +128,8 @@ These are defaults, not protocol requirements. Exact rates become implementation
 
 For an identical initial configuration and identical timestamped IMU trace, the motion feature and synthetic-audio outputs must be byte-for-byte repeatable on the host test target.
 
+WU-001 already enforces the first layer of this contract: repeated encoding of one semantic frame must produce identical 44-byte output, and a directly reviewable golden packet is checked byte-for-byte.
+
 Network timing, packet loss and Wi-Fi reconnect behavior are outside the deterministic signal-processing core.
 
 ## Configuration model
@@ -136,7 +142,7 @@ Configuration is expected to separate:
 - synthetic-audio mapping profile;
 - packet rate and multicast destination.
 
-Real credentials must never be committed. The first firmware may use a generated/local secrets header or environment-driven build configuration; later UX improvements may replace that without changing core APIs.
+Real credentials must never be committed. WU-001 provides `config/wifi.example.hpp` and ignores `config/wifi.local.hpp`; the example is intentionally unused by the protocol-smoke firmware until transport work begins.
 
 ## Failure behavior
 
@@ -144,6 +150,8 @@ Real credentials must never be committed. The first firmware may use a generated
 - If the sensor fails, firmware must fail visibly through serial diagnostics and must not emit arbitrary high-energy packets.
 - If Wi-Fi is lost, motion processing may continue but sends are skipped; reconnection must not reset calibration unless explicitly requested.
 - Stillness and sender shutdown must not leave WLED with a permanently asserted peak or non-decaying activity. The mapper therefore owns explicit decay-to-silence semantics.
+
+At the protocol boundary, WU-001 deterministically sanitises malformed semantic values before encoding and the reference decoder rejects malformed wire packets rather than propagating non-finite state.
 
 ## Resource posture
 
