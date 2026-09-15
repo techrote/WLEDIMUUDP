@@ -67,7 +67,7 @@ The project RAG pack lives under [`docs/rag/`](docs/rag/):
 - [`TESTING_AND_CI.md`](docs/rag/TESTING_AND_CI.md) — automated verification and evidence rules.
 - [`ROADMAP.md`](docs/rag/ROADMAP.md) — reviewed implementation sequence.
 - [`SOURCES.md`](docs/rag/SOURCES.md) — pinned upstream WLED provenance and re-verification rules.
-- [`ISSUES.md`](docs/rag/ISSUES.md) — implementation issue/dependency index.
+- [`ISSUE_INDEX.md`](docs/rag/ISSUE_INDEX.md) — implementation issue/dependency index.
 - [`WU001_IMPLEMENTATION.md`](docs/rag/WU001_IMPLEMENTATION.md) — locked bootstrap/protocol choices.
 
 [`AGENTS.md`](AGENTS.md) defines the repository-wide rules for autonomous implementation work.
