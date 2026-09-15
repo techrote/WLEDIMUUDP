@@ -2,9 +2,7 @@
 
 ## Purpose
 
-The project must be debuggable without having to wonder simultaneously whether the packet format, network stack, IMU driver and motion mapping are all wrong.
-
-Testing is therefore layered deliberately.
+The project must be debuggable without having to wonder simultaneously whether the packet format, network stack, IMU driver and motion mapping are all wrong. Testing is therefore layered deliberately.
 
 ## Required automated gates
 
@@ -21,7 +19,7 @@ An implementation issue must not weaken existing gates merely to merge.
 
 ## WU-001 accepted gate
 
-WU-001 establishes the first concrete CI gate with pinned development tools:
+WU-001 established:
 
 - Python 3.12 in GitHub Actions;
 - PlatformIO Core `6.1.18`;
@@ -30,137 +28,104 @@ WU-001 establishes the first concrete CI gate with pinned development tools:
 - PlatformIO `native` Unity protocol tests compiled as C++17 with `-Wall -Wextra -Wpedantic -Werror`;
 - PlatformIO `esp32s3` reference compile/smoke build using the Arduino framework.
 
-The successful WU-001 implementation head passed all **10 native protocol tests** and the ESP32-S3 reference firmware build. This is automated source/byte/build evidence only; it is not physical stock-WLED or live-IMU validation.
+The accepted WU-001 suite contains 10 named protocol tests. This is automated source/byte/build evidence only; it is not physical stock-WLED or live-IMU validation.
+
+## WU-002 host-probe gate
+
+WU-002 preserves every WU-001 gate and adds:
+
+- 10 named host-probe/transport tests in the native Unity run;
+- deterministic coverage for all 11 selectable pattern names, including the composed `scripted` mode;
+- exact scripted segment order and 160-frame cycle regression;
+- proof that host pattern packets are produced by the canonical WU-001 encoder;
+- CLI defaults/overrides plus invalid argument rejection;
+- exact packet hex round trip and malformed decoder rejection;
+- a real localhost UDP datagram whose received bytes must equal the canonical 44-byte packet;
+- `host_probe` native executable build with the same warning-as-error posture;
+- execution of the built CLI in `send --dry-run` smoke mode;
+- preservation of the ESP32-S3 firmware build after host-only socket code is added.
+
+There are therefore **20 named native tests across the accepted WU-001 protocol suite and WU-002 host suite** on the WU-002 branch. The first substantive WU-002 implementation head passed formatting, native tests, host build, CLI smoke and ESP32-S3 build before documentation reconciliation.
 
 ## Protocol tests
 
-Audio Sync V2 tests are mandatory and should include:
+Audio Sync V2 tests include:
 
-- encoded size is exactly 44 bytes;
+- encoded size exactly 44 bytes;
 - exact header bytes `30 30 30 30 32 00` (`00002\0`);
-- reserved bytes are zero;
-- known binary32 values produce exact expected little-endian bytes at offsets 8, 12, 36 and 40;
-- `samplePeak` appears at offset 16;
-- all 16 band bytes occupy offsets 18–33;
-- band values are clamped to `0..254`;
-- NaN/Inf inputs are sanitised deterministically;
-- no uninitialised/padding bytes leak into output;
-- a reference decoder round-trips golden packets;
-- repeated encoding of the same frame is byte-identical.
+- reserved bytes zero;
+- known binary32 values at offsets 8, 12, 36 and 40;
+- `samplePeak` at offset 16;
+- all 16 band bytes at offsets 18–33;
+- band clamp `0..254`;
+- deterministic NaN/Inf sanitisation;
+- no uninitialised/padding bytes on output;
+- reference decoder/golden round trip;
+- repeated encoding byte-identical;
+- malformed decoder rejection.
 
-WU-001 implements these as 10 directly named Unity tests, including malformed decoder rejection for wrong length/header/reserved bytes/non-finite floats/non-positive major peak. The golden fixture is small enough to review directly in source.
+The golden fixture is small enough to review directly in source and is also reused as the documented host-decoder example.
 
 ## Host packet tooling tests
 
-The host reference sender/decoder should support automated tests for:
+The host reference sender/decoder must keep packet ABI logic in `WledImuUdpCore` and test:
 
-- known-pattern frame generation;
+- known-pattern deterministic generation;
 - encode/decode agreement;
-- configurable multicast address/port/rate parsing;
-- loopback/local UDP test where the platform permits;
+- configurable destination/port/rate parsing;
+- invalid arguments fail clearly;
+- loopback/local UDP exact byte preservation where the platform permits;
 - graceful malformed-packet rejection;
-- packet timestamp/count diagnostics without depending on internet access.
+- scripted frame order/count behavior;
+- diagnostic output paths without internet access.
 
-The host sender is also the first interoperability tool for stock WLED and should exist before IMU integration.
+The host sender is the first interoperability tool for stock WLED and deliberately exists before IMU integration.
 
 ## Motion feature trace tests
 
-Pure motion processing must be tested with deterministic synthetic traces.
+Pure motion processing must be tested with deterministic synthetic traces. Required families include stationary level/tilted, slow roll, translational sway, constant spin, tap/impact, shake, motion-to-stillness decay and malformed/non-finite samples.
 
-Required trace families:
-
-- stationary level;
-- stationary tilted;
-- slow roll;
-- translational sway;
-- constant spin;
-- tap/impact;
-- shake;
-- motion-to-stillness decay;
-- malformed/non-finite samples.
-
-Tests should assert semantic invariants plus selected golden traces/hashes where useful.
-
-Examples:
-
-- stationary tilted input does not create material motion-energy output;
-- tap peak is bounded in duration;
-- stillness converges toward silence;
-- shake differs spectrally from roll;
-- no band exceeds 254;
-- fixed traces reproduce exactly.
+Tests should assert semantic invariants plus selected golden traces/hashes where useful. Examples include tilt without false motion energy, bounded tap duration, stillness convergence, shake/roll distinction and finite bounded outputs.
 
 ## Mapping tests
 
-Motion→synthetic-audio tests should keep feature extraction and packet encoding separate.
-
-Required checks include:
-
-- zero/still input yields near-silent frame;
-- orientation can shift spectral shape while preserving zero/near-zero total energy when motionless;
-- translation, rotation, shake and impact produce distinguishable band distributions;
-- `sampleRaw` responds faster than `sampleSmth`;
-- peak latching/refractory behavior is bounded;
-- major peak is finite and coherent with the synthetic spectrum;
-- profile/config changes are deterministic.
+Motion→synthetic-audio tests should keep feature extraction and packet encoding separate. Required checks include near-silent stillness, orientation shaping without false volume, distinguishable translation/rotation/shake/impact distributions, raw-vs-smoothed response, bounded peak behavior, finite coherent major peak and deterministic profiles.
 
 ## Firmware build tests
 
-CI should compile the reference ESP32-S3/QMI8658 firmware from a clean checkout using only documented dependencies.
+CI compiles the reference ESP32-S3 environment from a clean checkout using documented dependencies. Until WU-005, this remains a protocol-smoke target: it proves portable core compilation while intentionally omitting Wi-Fi, IMU and LED runtime dependencies.
 
-WU-001 begins with a deliberately smaller ESP32-S3 protocol-smoke target. It proves the portable protocol library also compiles in the embedded environment while intentionally omitting Wi-Fi, IMU and LED runtime dependencies. WU-005 will replace/extend this with the real reference hardware adapter.
-
-Firmware CI does not need real credentials. Build-time configuration must support a non-secret placeholder/test mode.
-
-Warnings from project code should be treated as defects unless documented and justified.
+Firmware CI needs no real credentials. Warnings from project code are defects unless documented and justified.
 
 ## Network behavior tests
 
-Core CI cannot guarantee multicast delivery on every runner. Prefer deterministic host tests for packet generation and small local transport tests where available.
+Core CI cannot prove multicast delivery across arbitrary infrastructure. WU-002 therefore tests the local transport seam with a real localhost UDP datagram, while multicast join/send behavior remains observable through the host tool and subject to later LAN/receiver validation.
 
-The firmware/network adapter should have test seams for:
-
-- disconnected state;
-- reconnect state;
-- send success/failure counters;
-- no fake motion packet on transport failure;
-- configurable destination.
+The future firmware/network adapter additionally needs seams for disconnected/reconnect state, send/error counters, no fake motion packet on failure and configurable destination.
 
 ## Stock-WLED interoperability evidence
 
-A real stock-WLED receiver test is a separate evidence layer.
-
-Before claiming a receiver version is validated, record:
+A real stock-WLED receiver test is a separate evidence layer. Before claiming a receiver version is validated, record:
 
 - exact WLED release/commit;
 - Audio Sync receive/network-only configuration;
 - sender revision;
 - packet rate and destination;
-- known-pattern test result;
-- at least several audio-reactive effects observed;
-- any effect-specific anomalies.
+- known-pattern result;
+- several audio-reactive effects observed;
+- effect-specific anomalies;
+- relevant network topology.
 
-If hardware is unavailable, say so. Do not infer physical interoperability solely from source conformance.
+WU-002 had no physical receiver available. Its reference to WLED v16.0.1 is source/documentation provenance, not physical compatibility evidence.
 
 ## Performance and resource checks
 
-For the reference firmware, keep an eye on:
-
-- steady-state loop/sample timing;
-- dropped/missed samples;
-- UDP send cadence;
-- dynamic allocation count in hot path;
-- firmware flash/RAM size;
-- reconnect behavior.
-
-Hard performance budgets should only be introduced after measurement. The architecture should nevertheless remain small and allocation-light by construction.
+For the reference firmware, track steady-state timing, dropped samples, UDP cadence, hot-path allocations, flash/RAM size and reconnect behavior. Hard budgets should follow measurement rather than assumption.
 
 ## CI implementation sequence
 
-CI grows with the roadmap:
-
 - WU-001: formatting + native protocol tests + placeholder/reference firmware compile;
-- WU-002: host probe tests;
+- WU-002: host probe tests + native executable build + CLI smoke + local UDP loopback;
 - WU-003: deterministic motion trace tests;
 - WU-004: mapping/profile tests;
 - WU-005: full reference firmware build and adapter tests;
@@ -168,13 +133,6 @@ CI grows with the roadmap:
 
 ## Merge evidence
 
-Every implementation PR should state:
-
-- tests run;
-- firmware environments built;
-- CI run/status;
-- warnings observed;
-- hardware validation performed or explicitly not performed;
-- documentation reconciled.
+Every implementation PR should state tests run, firmware environments built, CI run/status, warnings observed, hardware validation performed or explicitly unavailable, and documentation reconciliation.
 
 A green automated gate authorises merge under the repository workflow, but must never be described as physical validation when it is not.

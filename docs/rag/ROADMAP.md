@@ -17,8 +17,6 @@ That path is fast to demonstrate but poor to debug. If the receiver does not rea
 
 ## Plan review findings
 
-The plan was revised around these findings:
-
 ### 1. Protocol truth must precede hardware
 
 A host/reference sender can prove that stock WLED accepts our exact 44-byte packets before any IMU code exists.
@@ -78,11 +76,7 @@ WU-002 and WU-003 are conceptually separable after WU-001, but the issue sequenc
 
 **Issue:** #1  
 **Implementation PR:** #8  
-**Status:** implementation complete and automated gate green on the PR branch; accepted only after the exact documented head is merged to `main` and issue #1 closes.
-
-### Goal
-
-Create the build/test foundation and exact host-testable WLED Audio Sync V2 encoder before any real IMU integration.
+**Status:** accepted. Squash-merged to `main` as `864242b056830060607592c092c9bce1a9cebdbe`; issue #1 closed completed; post-merge CI green.
 
 ### Delivered implementation
 
@@ -90,41 +84,54 @@ Create the build/test foundation and exact host-testable WLED Audio Sync V2 enco
 - portable `WledImuUdpCore` protocol library;
 - semantic `SyntheticAudioFrame` separated from exact 44-byte wire packet;
 - explicit little-endian Audio Sync V2 encoder with deterministic sanitisation;
-- strict reference decoder for tests/later tools;
-- directly reviewable exact golden packet fixture and malformed-input tests;
-- pinned clang-format and PlatformIO development dependencies;
-- CI workflow: formatting → native protocol tests → ESP32-S3 build;
-- secret-safe Wi-Fi configuration template for later transport work;
-- README bootstrap/build/test commands and locked WU-001 implementation contract.
+- strict reference decoder;
+- directly reviewable golden packet fixture and malformed-input tests;
+- pinned clang-format and PlatformIO dependencies;
+- CI formatting/native/ESP32-S3 gate;
+- secret-safe Wi-Fi configuration template;
+- bootstrap/build/test documentation.
 
-### Automated evidence
+### Accepted evidence
 
-The implementation head passed all 10 native protocol tests and the ESP32-S3 reference firmware build. Physical stock-WLED interoperability and live IMU behavior remain explicitly outside WU-001’s evidence boundary.
-
-### Exit condition
-
-A clean checkout can run native protocol tests and compile a minimal reference firmware without credentials or hardware. Final acceptance additionally requires merge verification on `main` and issue #1 closure.
+10 named native protocol tests plus the ESP32-S3 protocol-smoke build. No physical stock-WLED or live-IMU claim was made.
 
 ---
 
 ## WU-002 — Host Audio Sync probe and interoperability harness
 
+**Issue:** #2  
+**Implementation PR:** #9  
+**Status:** implementation complete on the PR branch; acceptance requires the final documented head to pass the full gate, merge to `main`, and close issue #2.
+
 ### Goal
 
-Prove and debug the WLED side independently of IMU hardware.
+Prove and debug the WLED/network side independently of IMU hardware.
 
-### Deliverables
+### Delivered implementation
 
-- host command-line sender capable of transmitting known synthetic patterns to `239.0.0.1:11988` (configurable);
-- packet decoder/dump tool;
-- deterministic patterns such as silence, level ramp, moving single band, broadband pulse, peak pulse and sweeping major peak;
-- loopback/encode-decode tests;
-- stock-WLED setup/validation procedure naming tested WLED versions when evidence exists;
-- packet-rate/configuration controls suitable for compatibility diagnosis.
+- native C++17 host probe that reuses the canonical WU-001 protocol library;
+- `send`, `listen` and `decode` command modes;
+- default `239.0.0.1:11988`, configurable IPv4 destination/port and `1..50 Hz` send rate;
+- deterministic `silence`, low/medium/high, ramp, single-band, two-band, broadband-pulse, peak-pulse and major-peak-sweep patterns;
+- locked 160-frame scripted sequence comprising ten 16-frame segments;
+- exact hex packet conversion plus concatenated 44-byte binary-file decoder;
+- cross-platform POSIX/Winsock UDP adapter;
+- source/timestamp/cadence diagnostics while listening;
+- localhost exact-byte UDP loopback regression;
+- host executable build and real CLI dry-run CI smoke test;
+- source/provenance-aware stock-WLED receive setup and troubleshooting guide.
+
+### Automated evidence
+
+The first substantive implementation head `4074abc6520cd24f7d794c0eb10754593d9be3ed` passed strict formatting, the native test suites, host executable build, CLI dry-run smoke test and ESP32-S3 build. The combined branch contains 20 named native tests: 10 accepted WU-001 protocol tests plus 10 WU-002 host/transport tests.
+
+### Evidence boundary
+
+Current WLED source was re-verified on 2026-09-16 at `06ae26db67107cb3f6a3d107a92340035991a063`; latest stable release observed was v16.0.1. No physical receiver was available, so physical stock-WLED compatibility remains pending rather than inferred from source/loopback conformance.
 
 ### Exit condition
 
-An agent or user can make stock WLED react using known generated control patterns without an IMU sender.
+A user can build a host tool that emits deterministic canonical V2 traffic, inspects multicast traffic/captures, and follows a documented stock-WLED receive procedure without any IMU hardware. Final roadmap acceptance additionally requires exact-head CI, merge verification on `main`, and issue #2 closure.
 
 ---
 
@@ -164,7 +171,7 @@ Turn stable motion semantics into expressive WLED Audio Reactive control data.
 - `sampleRaw`, `sampleSmth`, `samplePeak`, magnitude and major-peak semantics;
 - deterministic profile/configuration model;
 - host tests demonstrating distinguishable motion classes and bounded values;
-- mapper output wired through the already accepted V2 encoder.
+- mapper output wired through the accepted V2 encoder.
 
 ### Exit condition
 
@@ -242,13 +249,13 @@ A new user can go from clean checkout to a running sender and stock-WLED receive
 
 ## Deferred backlog
 
-These are intentionally not part of the initial issue chain:
+These remain outside the initial chain:
 
 - captive-portal/web provisioning;
 - additional IMU adapters;
 - battery/deep-sleep optimisation;
 - sophisticated gesture classifiers/ML;
-- effect-specific mapping profiles beyond demonstrated need;
+- effect-specific profiles beyond demonstrated need;
 - WLED realtime-RGB output;
 - ESP-NOW;
 - ESPsand integration;
@@ -258,4 +265,4 @@ New work should be added only after the core transparent bridge is demonstrated 
 
 ## Roadmap completion rule
 
-Each WU issue is intended to be implemented autonomously from current `main` using its issue body plus the RAG pack. Every implementation issue must complete code, tests, documentation reconciliation, PR/CI repair, merge verification and issue closure rather than stopping at a plan or draft PR.
+Each WU issue is implemented autonomously from current `main` using its issue body plus the RAG pack. Every implementation issue must complete code, tests, documentation reconciliation, PR/CI repair, merge verification and issue closure rather than stopping at a plan or draft PR.

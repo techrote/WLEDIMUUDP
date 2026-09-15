@@ -1,0 +1,11 @@
+{
+  "name": "WledImuUdpHost",
+  "version": "0.1.0",
+  "description": "Native host probe, deterministic patterns and UDP transport for WLEDIMUUDP",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}

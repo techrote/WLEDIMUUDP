@@ -6,7 +6,7 @@ WLEDIMUUDP succeeds only if stock WLED accepts its packets as ordinary network a
 
 ## Upstream source of truth
 
-Protocol details were re-verified against current WLED source on 2026-09-15 at commit:
+Protocol/setup details were re-verified for WU-002 on **2026-09-16** against current WLED `main` commit:
 
 `06ae26db67107cb3f6a3d107a92340035991a063`
 
@@ -14,17 +14,18 @@ Primary source:
 
 - https://github.com/wled/WLED/blob/06ae26db67107cb3f6a3d107a92340035991a063/usermods/audioreactive/audio_reactive.cpp
 
-Stock WLED Audio Reactive documentation:
+Official documentation:
 
 - https://kno.wled.ge/advanced/audio-reactive/
+- https://kno.wled.ge/interfaces/udp-realtime/
+
+The latest stable GitHub release observed during WU-002 was WLED **v16.0.1**. That is a source/documentation reference only; physical receiver validation remains pending.
 
 Future implementation work must re-check upstream before intentionally changing compatibility assumptions.
 
 ## V2 payload
 
 Current WLED declares its new Audio Sync V2 structure as a packed **44-byte** payload and identifies it with header `00002`.
-
-The exact byte layout is:
 
 | Offset | Size | Field | WLED type | WLEDIMUUDP rule |
 |---:|---:|---|---|---|
@@ -45,7 +46,7 @@ WLED’s own transmitter constrains the 16 GEQ bytes to `0..254` and sends the p
 
 Current WLED targets transmit native packed `float` fields directly. The relevant ESP32/ESP8266 receivers are little-endian and use 32-bit IEEE-754 floats.
 
-WLEDIMUUDP therefore defines the V2 wire contract as explicit **little-endian IEEE-754 binary32** for all four-byte float fields. Host golden tests must verify exact bytes for known values.
+WLEDIMUUDP therefore defines the V2 wire contract as explicit **little-endian IEEE-754 binary32** for all four-byte float fields. Host golden tests verify exact bytes for known values.
 
 If upstream WLED ever changes this ABI, that is a protocol-version event and must not be hidden inside a mapping tweak.
 
@@ -53,26 +54,32 @@ If upstream WLED ever changes this ABI, that is a protocol-version event and mus
 
 Current stock WLED defaults Audio Sync to:
 
-- multicast group: `239.0.0.1`
-- UDP port: `11988`
+- multicast group: `239.0.0.1`;
+- UDP port: `11988`.
 
-The WLED Audio Reactive code joins that multicast group when Audio Sync is enabled. The default project sender must target the same address/port, while allowing explicit configuration for advanced setups.
+The WLED Audio Reactive code joins that multicast group when Audio Sync is enabled. WU-002's host sender uses the same defaults while allowing explicit destination/port configuration.
 
 ## Receiver configuration
 
-The intended receiver is **stock WLED** with Audio Reactive / Audio Sync configured to receive network audio data. Current WLED source represents receive mode with the receive bit in `audioSyncEnabled` and includes a network-only digital-mic/input type.
+The intended receiver is **stock WLED** with Audio Reactive / Audio Sync configured to receive network audio data. Current WLED source represents receive mode with the receive bit in `audioSyncEnabled` and includes a network-only sound/input mode.
 
-The project must provide exact user-facing setup steps once the first interoperability issue has been validated against a stock WLED release. Do not guess UI wording across WLED versions; compatibility docs must name the tested release/source revision.
+WU-002 documents the source-verified setup procedure in `HOST_PROBE.md`: configure Audio Sync to **Receive**, keep the matching UDP port, select an audio-reactive effect, and use deterministic host patterns to isolate receiver/network behavior. Exact surrounding UI wording may vary by WLED release/build, so documentation must not invent labels from an untested version.
 
 ## Send cadence
 
-Audio Sync V2 is a streaming control protocol, not a request/response protocol. WLED’s implementation is designed for frequent small datagrams. WLEDIMUUDP plans a **50 Hz** default synthetic-audio frame rate, with IMU acquisition at a higher rate.
+Audio Sync V2 is a streaming control protocol, not a request/response protocol. Current WLED UDP Sound Sync documentation says external senders may be slower than the approximately **20 ms** cadence but should not send faster.
 
-The 50 Hz default is a project choice, not a claim that the protocol requires exactly 50 Hz. It must remain configurable and be validated for receiver smoothness and network behavior.
+WU-002 therefore locks the host probe to:
+
+- default: **50 Hz**;
+- configurable range: **1..50 Hz**;
+- values above 50 Hz rejected by argument parsing.
+
+This is a project interoperability guard, not a claim that exactly 50 Hz is required. The future firmware baseline remains 50 Hz unless later physical measurements justify a documented change.
 
 ## Project semantic ranges
 
-The wire format itself does not make IMU semantics meaningful. Until later tuning locks stronger contracts, WLEDIMUUDP uses these conservative project ranges:
+Until later mapping work locks stronger contracts, WLEDIMUUDP uses these conservative project ranges:
 
 - `sampleRaw`: finite `0..255` motion-energy scale;
 - `sampleSmth`: finite `0..255` smoothed motion-energy scale;
@@ -81,7 +88,7 @@ The wire format itself does not make IMU semantics meaningful. Until later tunin
 - `FFT_Magnitude`: finite non-negative synthetic magnitude, initially normalised around `0..255`;
 - `FFT_MajorPeak`: finite positive synthetic frequency-like value; quiet output must use a safe stable value rather than NaN/Inf.
 
-Mapping/tuning may revise those project ranges only with tests and documentation. The packet offsets and encoded size remain protocol invariants.
+Mapping/tuning may revise those project ranges only with tests and documentation. Packet offsets and encoded size remain protocol invariants.
 
 ## Encoder requirements
 
@@ -96,13 +103,13 @@ The canonical encoder must:
 - never leak struct padding or uninitialised memory;
 - produce deterministic golden bytes on host CI.
 
-A decoder used by host tooling/tests should mirror the same layout but is not part of the sender’s runtime hot path.
+A decoder used by host tooling/tests mirrors the same layout but is not part of the sender’s runtime hot path.
 
 ## WU-001 locked implementation semantics
 
-WU-001 implements the protocol layer in `lib/WledImuUdpCore` and separates the semantic `SyntheticAudioFrame` from the exact 44-byte wire packet.
+WU-001 implements the protocol layer in `lib/WledImuUdpCore` and separates semantic `SyntheticAudioFrame` state from the exact 44-byte wire packet.
 
-The canonical encoder now has these deterministic sanitisation rules:
+The canonical encoder has these deterministic sanitisation rules:
 
 - non-finite or non-positive `sampleRaw` / `sampleSmth` become `0`; positive values clamp to `255`;
 - all 16 input band values clamp to `254`;
@@ -113,9 +120,23 @@ The canonical encoder now has these deterministic sanitisation rules:
 
 The implementation statically requires 8-bit bytes and IEEE-754 32-bit `float`, converts each float to its binary32 bit pattern, and writes that pattern explicitly in little-endian order. A blind packed-struct `memcpy` is not the canonical sender representation.
 
-WU-001 also provides a strict reference decoder for tests and later host tooling. It rejects null input, wrong length/header, non-zero reserved bytes, non-finite floats, and non-positive major-peak values. It intentionally does not apply sender-side level clamps to otherwise valid received packets.
+The strict reference decoder rejects null input, wrong length/header, non-zero reserved bytes, non-finite floats, and non-positive major-peak values. It intentionally does not apply sender-side level clamps to otherwise valid received packets.
 
 The committed golden fixture encodes `sampleRaw=1.0`, `sampleSmth=2.5`, peak asserted, bands `0..15`, magnitude `16.0`, and major peak `440.0`, and is compared byte-for-byte in native CI.
+
+## WU-002 host compatibility layer
+
+WU-002 adds `lib/WledImuUdpHost` and the `host_probe` native executable. Pattern generation produces semantic frames and then calls the canonical WU-001 encoder; it does not reproduce field offsets or serialization logic.
+
+The probe can:
+
+- send deterministic named patterns to a configurable IPv4 destination/port;
+- join and inspect Audio Sync multicast traffic;
+- decode exact hex packets or one/more concatenated 44-byte binary packets;
+- report malformed decoder results explicitly;
+- show packet source/timing while listening.
+
+The deterministic scripted probe is exactly 160 frames: ten named 16-frame segments in a locked order. See `HOST_PROBE.md` for commands and setup.
 
 ## Multicast behavior
 
@@ -135,10 +156,10 @@ Initial implementation supports Audio Sync **V2 only**. Do not add V1 fallback u
 
 Before a release claims stock-WLED compatibility, record:
 
-- WLED release/version tested;
+- WLED release/version physically tested;
 - receiver Audio Sync settings used;
 - sender packet rate and network topology;
 - at least one known-pattern packet capture or decoder trace;
 - at least several stock audio-reactive effects that visibly respond.
 
-Automated byte-level conformance is necessary but not a substitute for clearly labelled physical/receiver validation.
+WU-002 provides the tooling needed for that evidence but did not have a physical receiver available. Automated byte/loopback conformance is necessary, not a substitute for physical validation.
