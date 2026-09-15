@@ -1,0 +1,7 @@
+.pio/
+.venv/
+__pycache__/
+.vscode/
+config/wifi.local.hpp
+*.pyc
+.DS_Store

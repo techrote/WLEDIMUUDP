@@ -98,6 +98,25 @@ The canonical encoder must:
 
 A decoder used by host tooling/tests should mirror the same layout but is not part of the sender’s runtime hot path.
 
+## WU-001 locked implementation semantics
+
+WU-001 implements the protocol layer in `lib/WledImuUdpCore` and separates the semantic `SyntheticAudioFrame` from the exact 44-byte wire packet.
+
+The canonical encoder now has these deterministic sanitisation rules:
+
+- non-finite or non-positive `sampleRaw` / `sampleSmth` become `0`; positive values clamp to `255`;
+- all 16 input band values clamp to `254`;
+- non-finite or non-positive `FFT_Magnitude` becomes `0`; positive values clamp to `255`;
+- non-finite or non-positive `FFT_MajorPeak` becomes `1.0`;
+- `samplePeak` is emitted as exactly `0` or `1`;
+- the packet begins zero-initialised, so reserved bytes remain zero unless explicitly changed by a future protocol revision.
+
+The implementation statically requires 8-bit bytes and IEEE-754 32-bit `float`, converts each float to its binary32 bit pattern, and writes that pattern explicitly in little-endian order. A blind packed-struct `memcpy` is not the canonical sender representation.
+
+WU-001 also provides a strict reference decoder for tests and later host tooling. It rejects null input, wrong length/header, non-zero reserved bytes, non-finite floats, and non-positive major-peak values. It intentionally does not apply sender-side level clamps to otherwise valid received packets.
+
+The committed golden fixture encodes `sampleRaw=1.0`, `sampleSmth=2.5`, peak asserted, bands `0..15`, magnitude `16.0`, and major peak `440.0`, and is compared byte-for-byte in native CI.
+
 ## Multicast behavior
 
 Because the product uses multicast, one WLEDIMUUDP sender may drive multiple stock WLED receivers on the same LAN without pairing each receiver individually.

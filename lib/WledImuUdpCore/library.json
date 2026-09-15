@@ -1,0 +1,11 @@
+{
+  "name": "WledImuUdpCore",
+  "version": "0.1.0",
+  "description": "Host-testable WLEDIMUUDP protocol core",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}

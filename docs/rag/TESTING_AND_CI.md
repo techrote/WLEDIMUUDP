@@ -8,16 +8,29 @@ Testing is therefore layered deliberately.
 
 ## Required automated gates
 
-The initial CI baseline should eventually include:
+The CI baseline grows with the roadmap and must include:
 
 1. deterministic formatting/lint check;
-2. host/native unit tests for protocol, motion and mapping code;
+2. host/native unit tests for protocol, motion and mapping code as those modules exist;
 3. host utility tests where practical;
 4. reference ESP32-S3 firmware build;
 5. warning audit for project code;
 6. documentation/link/config sanity checks where cheap and deterministic.
 
 An implementation issue must not weaken existing gates merely to merge.
+
+## WU-001 accepted gate
+
+WU-001 establishes the first concrete CI gate with pinned development tools:
+
+- Python 3.12 in GitHub Actions;
+- PlatformIO Core `6.1.18`;
+- clang-format `18.1.8`;
+- strict clang-format dry-run over project C/C++ sources;
+- PlatformIO `native` Unity protocol tests compiled as C++17 with `-Wall -Wextra -Wpedantic -Werror`;
+- PlatformIO `esp32s3` reference compile/smoke build using the Arduino framework.
+
+The successful WU-001 implementation head passed all **10 native protocol tests** and the ESP32-S3 reference firmware build. This is automated source/byte/build evidence only; it is not physical stock-WLED or live-IMU validation.
 
 ## Protocol tests
 
@@ -35,7 +48,7 @@ Audio Sync V2 tests are mandatory and should include:
 - a reference decoder round-trips golden packets;
 - repeated encoding of the same frame is byte-identical.
 
-Golden fixtures should be small enough to review directly in source.
+WU-001 implements these as 10 directly named Unity tests, including malformed decoder rejection for wrong length/header/reserved bytes/non-finite floats/non-positive major peak. The golden fixture is small enough to review directly in source.
 
 ## Host packet tooling tests
 
@@ -94,6 +107,8 @@ Required checks include:
 ## Firmware build tests
 
 CI should compile the reference ESP32-S3/QMI8658 firmware from a clean checkout using only documented dependencies.
+
+WU-001 begins with a deliberately smaller ESP32-S3 protocol-smoke target. It proves the portable protocol library also compiles in the embedded environment while intentionally omitting Wi-Fi, IMU and LED runtime dependencies. WU-005 will replace/extend this with the real reference hardware adapter.
 
 Firmware CI does not need real credentials. Build-time configuration must support a non-secret placeholder/test mode.
 
