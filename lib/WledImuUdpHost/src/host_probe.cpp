@@ -28,10 +28,11 @@ namespace {
 
 constexpr std::uintptr_t kInvalidSocketHandle = std::numeric_limits<std::uintptr_t>::max();
 constexpr std::array<Pattern, 10> kScriptPatterns{
-    Pattern::kSilence,        Pattern::kLow,            Pattern::kMedium,
-    Pattern::kHigh,           Pattern::kLevelRamp,      Pattern::kSingleBand,
-    Pattern::kTwoBand,        Pattern::kBroadbandPulse, Pattern::kPeakPulse,
-    Pattern::kMajorPeakSweep,
+    Pattern::kSilence,   Pattern::kLow,
+    Pattern::kMedium,    Pattern::kHigh,
+    Pattern::kLevelRamp, Pattern::kSingleBand,
+    Pattern::kTwoBand,   Pattern::kBroadbandPulse,
+    Pattern::kPeakPulse, Pattern::kMajorPeakSweep,
 };
 
 protocol::SyntheticAudioFrame make_constant_frame(float level, std::uint16_t band,
@@ -79,12 +80,10 @@ std::uint8_t hex_nibble(char value) noexcept {
 std::uint32_t ipv4_host_value(const std::array<std::uint8_t, 4> &address) noexcept {
   return (static_cast<std::uint32_t>(address[0]) << 24U) |
          (static_cast<std::uint32_t>(address[1]) << 16U) |
-         (static_cast<std::uint32_t>(address[2]) << 8U) |
-         static_cast<std::uint32_t>(address[3]);
+         (static_cast<std::uint32_t>(address[2]) << 8U) | static_cast<std::uint32_t>(address[3]);
 }
 
-sockaddr_in make_sockaddr(const std::array<std::uint8_t, 4> &address,
-                          std::uint16_t port) noexcept {
+sockaddr_in make_sockaddr(const std::array<std::uint8_t, 4> &address, std::uint16_t port) noexcept {
   sockaddr_in target{};
   target.sin_family = AF_INET;
   target.sin_port = htons(port);
@@ -483,10 +482,10 @@ UdpSocket::UdpSocket() noexcept : handle_(kInvalidSocketHandle) {
 
   const int reuse = 1;
   static_cast<void>(setsockopt(socket, SOL_SOCKET, SO_REUSEADDR,
-                              reinterpret_cast<const char *>(&reuse), sizeof(reuse)));
+                               reinterpret_cast<const char *>(&reuse), sizeof(reuse)));
   const int ttl = 1;
   static_cast<void>(setsockopt(socket, IPPROTO_IP, IP_MULTICAST_TTL,
-                              reinterpret_cast<const char *>(&ttl), sizeof(ttl)));
+                               reinterpret_cast<const char *>(&ttl), sizeof(ttl)));
 }
 
 UdpSocket::~UdpSocket() {
@@ -515,8 +514,8 @@ bool UdpSocket::set_receive_timeout(std::uint32_t timeout_ms) noexcept {
   timeval timeout{};
   timeout.tv_sec = static_cast<time_t>(timeout_ms / 1000U);
   timeout.tv_usec = static_cast<suseconds_t>((timeout_ms % 1000U) * 1000U);
-  const int result = setsockopt(native_socket(handle_), SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                                sizeof(timeout));
+  const int result =
+      setsockopt(native_socket(handle_), SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 #endif
   if (result != 0) {
     last_error_ = socket_last_error();
@@ -533,8 +532,8 @@ bool UdpSocket::bind_any(std::uint16_t port) noexcept {
   local.sin_family = AF_INET;
   local.sin_port = htons(port);
   local.sin_addr.s_addr = htonl(INADDR_ANY);
-  const int result = bind(native_socket(handle_), reinterpret_cast<const sockaddr *>(&local),
-                          sizeof(local));
+  const int result =
+      bind(native_socket(handle_), reinterpret_cast<const sockaddr *>(&local), sizeof(local));
   if (result != 0) {
     last_error_ = socket_last_error();
     return false;
@@ -577,14 +576,15 @@ bool UdpSocket::join_multicast(const std::array<std::uint8_t, 4> &group) noexcep
 
 bool UdpSocket::send_to(const std::array<std::uint8_t, 4> &address, std::uint16_t port,
                         const std::uint8_t *data, std::size_t size) noexcept {
-  if (!valid() || data == nullptr || size > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+  if (!valid() || data == nullptr ||
+      size > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     return false;
   }
   const sockaddr_in target = make_sockaddr(address, port);
 #ifdef _WIN32
-  const int sent = sendto(native_socket(handle_), reinterpret_cast<const char *>(data),
-                          static_cast<int>(size), 0,
-                          reinterpret_cast<const sockaddr *>(&target), sizeof(target));
+  const int sent =
+      sendto(native_socket(handle_), reinterpret_cast<const char *>(data), static_cast<int>(size),
+             0, reinterpret_cast<const sockaddr *>(&target), sizeof(target));
 #else
   const ssize_t sent = sendto(native_socket(handle_), data, size, 0,
                               reinterpret_cast<const sockaddr *>(&target), sizeof(target));
@@ -606,9 +606,9 @@ int UdpSocket::receive(std::uint8_t *data, std::size_t capacity,
   sockaddr_in source{};
 #ifdef _WIN32
   int source_length = sizeof(source);
-  const int received = recvfrom(native_socket(handle_), reinterpret_cast<char *>(data),
-                                static_cast<int>(capacity), 0,
-                                reinterpret_cast<sockaddr *>(&source), &source_length);
+  const int received =
+      recvfrom(native_socket(handle_), reinterpret_cast<char *>(data), static_cast<int>(capacity),
+               0, reinterpret_cast<sockaddr *>(&source), &source_length);
 #else
   socklen_t source_length = sizeof(source);
   const ssize_t received = recvfrom(native_socket(handle_), data, capacity, 0,

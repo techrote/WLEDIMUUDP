@@ -18,10 +18,12 @@ using wledimuudp::protocol::AudioSyncV2Packet;
 using wledimuudp::protocol::DecodeError;
 
 constexpr std::array<Pattern, 11> kAllPatterns{
-    Pattern::kSilence,        Pattern::kLow,            Pattern::kMedium,
-    Pattern::kHigh,           Pattern::kLevelRamp,      Pattern::kSingleBand,
-    Pattern::kTwoBand,        Pattern::kBroadbandPulse, Pattern::kPeakPulse,
-    Pattern::kMajorPeakSweep, Pattern::kScripted,
+    Pattern::kSilence,   Pattern::kLow,
+    Pattern::kMedium,    Pattern::kHigh,
+    Pattern::kLevelRamp, Pattern::kSingleBand,
+    Pattern::kTwoBand,   Pattern::kBroadbandPulse,
+    Pattern::kPeakPulse, Pattern::kMajorPeakSweep,
+    Pattern::kScripted,
 };
 
 void assert_packet_equal(const AudioSyncV2Packet &expected, const AudioSyncV2Packet &actual) {
@@ -75,10 +77,11 @@ void test_motionless_patterns_expose_expected_signatures() {
 
 void test_scripted_sequence_has_locked_order_and_cycle() {
   constexpr std::array<Pattern, 10> expected{
-      Pattern::kSilence,        Pattern::kLow,            Pattern::kMedium,
-      Pattern::kHigh,           Pattern::kLevelRamp,      Pattern::kSingleBand,
-      Pattern::kTwoBand,        Pattern::kBroadbandPulse, Pattern::kPeakPulse,
-      Pattern::kMajorPeakSweep,
+      Pattern::kSilence,   Pattern::kLow,
+      Pattern::kMedium,    Pattern::kHigh,
+      Pattern::kLevelRamp, Pattern::kSingleBand,
+      Pattern::kTwoBand,   Pattern::kBroadbandPulse,
+      Pattern::kPeakPulse, Pattern::kMajorPeakSweep,
   };
 
   for (std::size_t segment = 0; segment < expected.size(); ++segment) {
@@ -88,8 +91,8 @@ void test_scripted_sequence_has_locked_order_and_cycle() {
                         wledimuudp::host::make_pattern_packet(Pattern::kScripted, index));
   }
   assert_packet_equal(wledimuudp::host::make_pattern_packet(Pattern::kScripted, 0U),
-                      wledimuudp::host::make_pattern_packet(
-                          Pattern::kScripted, wledimuudp::host::kScriptCycleFrames));
+                      wledimuudp::host::make_pattern_packet(Pattern::kScripted,
+                                                            wledimuudp::host::kScriptCycleFrames));
 }
 
 void test_pattern_packet_uses_canonical_encoder() {
@@ -111,10 +114,9 @@ void test_send_cli_defaults_and_overrides() {
   TEST_ASSERT_EQUAL_STRING("239.0.0.1",
                            wledimuudp::host::format_ipv4(default_result.options.address).c_str());
 
-  const char *overrides[] = {"host",       "send",      "--pattern", "single-band",
-                             "--address",  "127.0.0.1", "--port",    "12000",
-                             "--rate",     "25",        "--frames",  "7",
-                             "--dry-run"};
+  const char *overrides[] = {"host",      "send",   "--pattern", "single-band", "--address",
+                             "127.0.0.1", "--port", "12000",     "--rate",      "25",
+                             "--frames",  "7",      "--dry-run"};
   const auto override_result = wledimuudp::host::parse_host_options(13, overrides);
   TEST_ASSERT_TRUE(override_result.ok);
   TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(Pattern::kSingleBand),
@@ -145,9 +147,8 @@ void test_cli_rejects_invalid_arguments() {
 }
 
 void test_listen_and_decode_cli_contracts() {
-  const char *listen[] = {"host",         "listen", "--group",     "239.1.2.3",
-                          "--port",       "12001",  "--count",     "4",
-                          "--timeout-ms", "750"};
+  const char *listen[] = {"host",  "listen",  "--group", "239.1.2.3",    "--port",
+                          "12001", "--count", "4",       "--timeout-ms", "750"};
   const auto listen_result = wledimuudp::host::parse_host_options(10, listen);
   TEST_ASSERT_TRUE(listen_result.ok);
   TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(HostCommand::kListen),

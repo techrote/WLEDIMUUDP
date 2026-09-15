@@ -24,18 +24,17 @@ using wledimuudp::protocol::DecodeError;
 using wledimuudp::protocol::DecodeResult;
 
 void print_usage(std::ostream &output) {
-  output
-      << "WLEDIMUUDP host probe\n\n"
-      << "Usage:\n"
-      << "  wledimuudp-host send [--pattern NAME] [--address A.B.C.D] [--port N]\n"
-      << "                        [--rate 1..50] [--frames N] [--dry-run]\n"
-      << "  wledimuudp-host listen [--group A.B.C.D] [--port N] [--count N]\n"
-      << "                          [--timeout-ms N]\n"
-      << "  wledimuudp-host decode (--hex HEX | --file PATH)\n\n"
-      << "Patterns:\n"
-      << "  silence, low, medium, high, ramp, single-band, two-band,\n"
-      << "  broadband-pulse, peak-pulse, major-peak-sweep, scripted\n\n"
-      << "Defaults: multicast 239.0.0.1:11988, 50 Hz, scripted 160-frame cycle.\n";
+  output << "WLEDIMUUDP host probe\n\n"
+         << "Usage:\n"
+         << "  wledimuudp-host send [--pattern NAME] [--address A.B.C.D] [--port N]\n"
+         << "                        [--rate 1..50] [--frames N] [--dry-run]\n"
+         << "  wledimuudp-host listen [--group A.B.C.D] [--port N] [--count N]\n"
+         << "                          [--timeout-ms N]\n"
+         << "  wledimuudp-host decode (--hex HEX | --file PATH)\n\n"
+         << "Patterns:\n"
+         << "  silence, low, medium, high, ramp, single-band, two-band,\n"
+         << "  broadband-pulse, peak-pulse, major-peak-sweep, scripted\n\n"
+         << "Defaults: multicast 239.0.0.1:11988, 50 Hz, scripted 160-frame cycle.\n";
 }
 
 const char *decode_error_name(DecodeError error) noexcept {
@@ -67,8 +66,7 @@ void print_semantic_frame(std::ostream &output, const DecodeResult &decoded) {
   const auto &frame = decoded.frame;
   output << std::fixed << std::setprecision(2) << "raw=" << frame.sample_raw
          << " smooth=" << frame.sample_smoothed << " peak=" << (frame.sample_peak ? 1 : 0)
-         << " magnitude=" << frame.magnitude << " major_peak=" << frame.major_peak
-         << " bands=[";
+         << " magnitude=" << frame.magnitude << " major_peak=" << frame.major_peak << " bands=[";
   for (std::size_t index = 0; index < frame.bands.size(); ++index) {
     if (index != 0U) {
       output << ',';
@@ -78,8 +76,7 @@ void print_semantic_frame(std::ostream &output, const DecodeResult &decoded) {
   output << ']';
 }
 
-int decode_and_print(std::size_t index, const std::uint8_t *data, std::size_t size,
-                     bool show_hex) {
+int decode_and_print(std::size_t index, const std::uint8_t *data, std::size_t size, bool show_hex) {
   const DecodeResult decoded = wledimuudp::protocol::decode_audio_sync_v2(data, size);
   std::cout << "packet=" << index << ' ';
   if (show_hex && size == wledimuudp::protocol::kAudioSyncV2PacketSize) {
@@ -107,7 +104,8 @@ int run_send(const HostOptions &options) {
     const AudioSyncV2Packet packet = wledimuudp::host::make_pattern_packet(options.pattern, index);
     if (options.dry_run) {
       const DecodeResult decoded = wledimuudp::protocol::decode_audio_sync_v2(packet);
-      std::cout << "frame=" << index << " pattern=" << wledimuudp::host::pattern_name(options.pattern)
+      std::cout << "frame=" << index
+                << " pattern=" << wledimuudp::host::pattern_name(options.pattern)
                 << " hex=" << wledimuudp::host::packet_to_hex(packet) << ' ';
       print_semantic_frame(std::cout, decoded);
       std::cout << '\n';
@@ -146,7 +144,8 @@ int run_listen(const HostOptions &options) {
     return 2;
   }
   if (!socket.bind_any(options.port)) {
-    std::cerr << "bind failed on port " << options.port << ", error=" << socket.last_error() << '\n';
+    std::cerr << "bind failed on port " << options.port << ", error=" << socket.last_error()
+              << '\n';
     return 2;
   }
   if (!socket.join_multicast(options.address)) {
@@ -159,8 +158,9 @@ int run_listen(const HostOptions &options) {
     return 2;
   }
 
-  std::cout << "listening on " << wledimuudp::host::format_ipv4(options.address) << ':' << options.port
-            << " count=" << options.count << " timeout_ms=" << options.timeout_ms << '\n';
+  std::cout << "listening on " << wledimuudp::host::format_ipv4(options.address) << ':'
+            << options.port << " count=" << options.count << " timeout_ms=" << options.timeout_ms
+            << '\n';
 
   std::array<std::uint8_t, 2048> buffer{};
   const auto start = std::chrono::steady_clock::now();
@@ -181,7 +181,8 @@ int run_listen(const HostOptions &options) {
 
     const auto now = std::chrono::steady_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - start).count();
-    const auto delta = std::chrono::duration_cast<std::chrono::microseconds>(now - previous).count();
+    const auto delta =
+        std::chrono::duration_cast<std::chrono::microseconds>(now - previous).count();
     const DecodeResult decoded = wledimuudp::protocol::decode_audio_sync_v2(
         buffer.data(), static_cast<std::size_t>(received));
 

@@ -65,12 +65,11 @@ struct ParseResult {
 [[nodiscard]] const char *pattern_name(Pattern pattern) noexcept;
 [[nodiscard]] bool parse_pattern(std::string_view text, Pattern &pattern) noexcept;
 [[nodiscard]] protocol::SyntheticAudioFrame make_pattern_frame(Pattern pattern,
-                                                                std::uint32_t index) noexcept;
+                                                               std::uint32_t index) noexcept;
 [[nodiscard]] protocol::AudioSyncV2Packet make_pattern_packet(Pattern pattern,
                                                               std::uint32_t index) noexcept;
 
-[[nodiscard]] bool parse_ipv4(std::string_view text,
-                              std::array<std::uint8_t, 4> &address) noexcept;
+[[nodiscard]] bool parse_ipv4(std::string_view text, std::array<std::uint8_t, 4> &address) noexcept;
 [[nodiscard]] std::string format_ipv4(const std::array<std::uint8_t, 4> &address);
 [[nodiscard]] bool is_multicast(const std::array<std::uint8_t, 4> &address) noexcept;
 
