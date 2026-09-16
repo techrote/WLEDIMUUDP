@@ -265,7 +265,7 @@ void service_sensor(const std::uint64_t now_us) {
 bool transmit_frame(const wledimuudp::protocol::SyntheticAudioFrame &frame) {
   const auto packet = encode_audio_sync_v2(frame);
   const auto target = multicast_address();
-  if (udp.beginPacketMulticast(target, wledimuudp::config::kMulticastPort, WiFi.localIP()) != 1) {
+  if (udp.beginPacket(target, wledimuudp::config::kMulticastPort) != 1) {
     ++counters.send_errors;
     return false;
   }
