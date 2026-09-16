@@ -74,7 +74,8 @@ void assert_frame_finite_and_bounded(const SyntheticAudioFrame &frame) {
 void test_balanced_profile_contract_and_centers_are_stable() {
   TEST_ASSERT_EQUAL_UINT16(1U, wledimuudp::mapping::kBalancedProfileVersion);
   TEST_ASSERT_EQUAL_UINT32(16U, wledimuudp::mapping::kBalancedBandCentersHz.size());
-  for (std::size_t index = 1U; index < wledimuudp::mapping::kBalancedBandCentersHz.size(); ++index) {
+  for (std::size_t index = 1U; index < wledimuudp::mapping::kBalancedBandCentersHz.size();
+       ++index) {
     TEST_ASSERT_TRUE(wledimuudp::mapping::kBalancedBandCentersHz[index] >
                      wledimuudp::mapping::kBalancedBandCentersHz[index - 1U]);
   }
@@ -163,9 +164,9 @@ void test_motion_then_stillness_clears_spectrum_and_peak() {
 void test_all_trace_outputs_are_finite_and_bounded() {
   constexpr std::array<MotionTraceKind, 9> kinds{
       MotionTraceKind::kStationaryLevel, MotionTraceKind::kStationaryTilted,
-      MotionTraceKind::kSlowRoll,        MotionTraceKind::kTranslationalSway,
-      MotionTraceKind::kConstantSpin,    MotionTraceKind::kTap,
-      MotionTraceKind::kShake,           MotionTraceKind::kMotionThenStill,
+      MotionTraceKind::kSlowRoll, MotionTraceKind::kTranslationalSway,
+      MotionTraceKind::kConstantSpin, MotionTraceKind::kTap,
+      MotionTraceKind::kShake, MotionTraceKind::kMotionThenStill,
       MotionTraceKind::kMalformedInjection,
   };
 
