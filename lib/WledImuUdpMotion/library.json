@@ -1,0 +1,11 @@
+{
+  "name": "WledImuUdpMotion",
+  "version": "0.1.0",
+  "description": "Deterministic host-testable WLEDIMUUDP motion feature core",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}
