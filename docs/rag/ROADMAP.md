@@ -102,13 +102,9 @@ No physical QMI8658 noise/threshold, board-axis, live scheduling, mapping useful
 
 **Issue:** #4  
 **Implementation PR:** #11  
-**Status:** implementation and RAG reconciliation in progress on `wu-004-balanced-mapper`; acceptance requires final documented-head CI, squash merge to `main`, issue #4 closure and post-merge verification.
+**Status:** accepted. Squash-merged to `main` as `75a1e4f988d08905574001e8a6378a0f1120be3e`; issue #4 closed completed.
 
-### Goal
-
-Turn the accepted WU-003 motion vocabulary into deterministic, inspectable WLED Audio Reactive control data without adding hardware/network concerns.
-
-### Delivered implementation on the PR branch
+### Delivered implementation
 
 - portable `lib/WledImuUdpMapping` from `MotionFeatures` to accepted `SyntheticAudioFrame`;
 - explicit **Balanced-v1** profile/version;
@@ -122,48 +118,58 @@ Turn the accepted WU-003 motion vocabulary into deterministic, inspectable WLED 
 - quiet spectrum/major-peak behavior and invalid-feature state safety;
 - reuse of all nine accepted WU-003 motion fixture families;
 - deterministic full-chain mapper→WU-001 encoder regressions;
-- native `mapping_probe` inspection tool with representative still/sway/spin/shake/impact/tilt presets and exact packet output;
-- CI build/smoke gate for the mapper probe;
-- ESP32-S3 smoke chain now exercises motion→mapping→exact packet encoding.
+- native `mapping_probe` inspection tool with still/sway/spin/shake/impact/tilt presets and exact packet output;
+- CI mapper probe build/smoke and ESP32-S3 pure-core chain compilation.
 
-### Locked contract
+### Accepted evidence
 
-Authoritative defaults, center table, band semantics and evidence boundary are recorded in `MOTION_MAPPING.md` and `WU004_IMPLEMENTATION.md`.
-
-The expected combined suite is 44 named native tests: 31 accepted prerequisite tests + 13 WU-004 mapping tests. The exact final count/run must be confirmed from the final documentation-reconciled CI log before merge.
+Final PR head `2fb2c5313c7523ad37f29d1f72820e2bc2f2d2b9` passed CI run `35123755319`: **44 named native tests, 0 failures, 0 ignored**, both host probes green and ESP32-S3 compilation green. Post-merge `main` CI run `35127128137` also completed successfully.
 
 ### Evidence boundary
 
 WU-004 proves deterministic synthetic-trace semantics, host inspection and embedded compilation. It does not prove physical stock-WLED perceptual quality, live QMI8658 tuning, board axes, Wi-Fi transport or receiver interoperability.
 
-### Exit condition
-
-Balanced-v1 produces bounded, semantically distinct and byte-repeatable Audio Sync frames from accepted motion traces; host tooling can inspect representative mapper output; the full inherited gate plus mapper tool/embedded smoke passes on the exact documented head; merge/issue/post-merge state is verified.
-
 ---
 
 ## WU-005 — ESP32-S3 + QMI8658/QMI8658C reference sender firmware
 
-**Issue:** #5
+**Issue:** #5  
+**Implementation PR:** #12
 
 ### Goal
 
 Put the accepted protocol + motion + mapping core on the reference hardware without changing their semantics.
 
-### Deliverables
+### Implemented reference design
 
-- QMI8658/QMI8658C adapter and board profile;
-- documented accelerometer/gyro rate/range and axis transform;
-- startup calibration and serial diagnostics;
-- Wi-Fi join/reconnect and multicast transport;
-- 200 Hz-class sampling / 50 Hz-class mapping/send baseline where measured practical;
-- no sender-LED dependency;
-- credentials template with secrets excluded from Git;
-- native regressions preserved and firmware CI green.
+- explicit Waveshare ESP32-S3-Matrix board profile with QMI8658(C) I2C pins, address and axis-transform seam;
+- direct Arduino `TwoWire` QMI8658 adapter with identity check, explicit register configuration, signed raw conversion and status/error reporting;
+- ±8 g accelerometer and ±1024 dps gyroscope profile;
+- QMI8658 6-DoF ODR code `0101`, documented as 224.2 Hz effective, paired with a 4460 us acquisition gate;
+- startup stationary calibration with moving/noisy-window rejection, serial reason reporting and explicit recalibration command;
+- 64-bit monotonic timestamp extension across 32-bit `micros()` wrap;
+- accepted WU-003 motion core + WU-004 Balanced-v1 mapper + WU-001 canonical encoder unchanged;
+- station-mode Wi-Fi join and bounded reconnect behavior;
+- multicast Audio Sync V2 output to configurable/default `239.0.0.1:11988` at 50 Hz;
+- strict live-send gate requiring connected Wi-Fi, healthy sensor, accepted calibration and current valid features;
+- immediate live-send inhibition on sensor failure followed by periodic re-probe and mandatory fresh calibration;
+- explicit diagnostic mode that sends a deterministic known frame through the canonical encoder/network path without requiring live IMU input;
+- one-second serial counters for actual accepted sensor samples and successful packet sends;
+- no sender-LED initialization or runtime dependency;
+- ignored `wifi.local.hpp` credential/config workflow with a compile-safe committed template;
+- 13 new portable firmware-support tests, bringing the expected native suite to 57 pending exact merge-gating CI confirmation.
 
-### Exit condition
+### Locked implementation contract
 
-The reference firmware builds reproducibly and emits canonical known frames plus live IMU-derived frames without changing accepted pure-core semantics.
+The exact board pins, QMI8658 register/range/rate choices, calibration thresholds, network defaults, scheduling semantics, failure behavior and physical-evidence boundary are recorded in `HARDWARE.md`, `WU005_IMPLEMENTATION.md`, `ARCHITECTURE.md`, `TESTING_AND_CI.md` and `SOURCES.md`.
+
+### Acceptance rule
+
+PR #12 may merge only after its exact final head passes the full inherited formatting/native/tool/ESP32-S3 CI gate. Canonical acceptance/merge evidence belongs on PR #12 and issue #5 so this roadmap does not guess a future squash SHA.
+
+### Evidence boundary
+
+WU-005 automated evidence can establish deterministic register decoding/policy seams and compilation of the real Arduino sender runtime. It cannot establish physical board-axis signs, sensor noise/clipping, actual scheduler rates, RF/multicast reliability or stock-WLED visual response. Those observations remain explicit WU-006 work unless separately recorded.
 
 ---
 
