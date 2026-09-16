@@ -11,13 +11,13 @@ namespace {
 
 using wledimuudp::firmware::AxisTransform;
 using wledimuudp::firmware::CalibrationResult;
+using wledimuudp::firmware::can_emit_packet;
+using wledimuudp::firmware::decode_qmi8658_motion_data;
 using wledimuudp::firmware::FixedRateGate;
 using wledimuudp::firmware::MicrosExtender;
 using wledimuudp::firmware::ReconnectGate;
 using wledimuudp::firmware::SenderMode;
 using wledimuudp::firmware::StartupCalibration;
-using wledimuudp::firmware::can_emit_packet;
-using wledimuudp::firmware::decode_qmi8658_motion_data;
 using wledimuudp::motion::ImuSample;
 using wledimuudp::motion::MotionCalibration;
 
