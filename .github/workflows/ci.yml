@@ -22,12 +22,11 @@ jobs:
       - name: Install development dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Show required formatting
+      - name: Check formatting
         shell: bash
         run: |
           mapfile -d '' files < <(find lib src test config -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0)
-          clang-format -i "${files[@]}"
-          git diff --exit-code
+          clang-format --dry-run --Werror "${files[@]}"
 
       - name: Run native tests
         run: python -m platformio test -e native
