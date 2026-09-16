@@ -61,8 +61,9 @@ MotionFeatures make_preset(const std::string_view name, bool &ok) {
     features.linear_accel_magnitude_g = 0.18F;
     features.motion_energy_instant = 0.5F;
     features.motion_energy_smoothed = 0.35F;
-    features.orientation = name == "tilt-left" ? wledimuudp::motion::Vec3{-0.8F, 0.0F, 0.6F}
-                                                : wledimuudp::motion::Vec3{0.8F, 0.0F, 0.6F};
+    features.orientation =
+        name == "tilt-left" ? wledimuudp::motion::Vec3{-0.8F, 0.0F, 0.6F}
+                            : wledimuudp::motion::Vec3{0.8F, 0.0F, 0.6F};
     return features;
   }
 
@@ -73,8 +74,7 @@ MotionFeatures make_preset(const std::string_view name, bool &ok) {
 void print_frame(const SyntheticAudioFrame &frame) {
   std::cout << std::fixed << std::setprecision(2) << "raw=" << frame.sample_raw
             << " smooth=" << frame.sample_smoothed << " peak=" << (frame.sample_peak ? 1 : 0)
-            << " magnitude=" << frame.magnitude << " major_peak=" << frame.major_peak
-            << " bands=[";
+            << " magnitude=" << frame.magnitude << " major_peak=" << frame.major_peak << " bands=[";
   for (std::size_t index = 0; index < frame.bands.size(); ++index) {
     if (index != 0U) {
       std::cout << ',';
