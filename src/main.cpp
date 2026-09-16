@@ -36,4 +36,6 @@ void setup() {
   Serial.println("No Wi-Fi, live IMU adapter, or LED path is enabled yet.");
 }
 
-void loop() { delay(1000); }
+void loop() {
+  delay(1000);
+}
