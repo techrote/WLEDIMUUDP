@@ -57,13 +57,18 @@ MotionFeatures make_preset(const std::string_view name, bool &ok) {
     features.impact = true;
     return features;
   }
-  if (name == "tilt-left" || name == "tilt-right") {
+  if (name == "tilt-left") {
     features.linear_accel_magnitude_g = 0.18F;
     features.motion_energy_instant = 0.5F;
     features.motion_energy_smoothed = 0.35F;
-    features.orientation =
-        name == "tilt-left" ? wledimuudp::motion::Vec3{-0.8F, 0.0F, 0.6F}
-                            : wledimuudp::motion::Vec3{0.8F, 0.0F, 0.6F};
+    features.orientation = {-0.8F, 0.0F, 0.6F};
+    return features;
+  }
+  if (name == "tilt-right") {
+    features.linear_accel_magnitude_g = 0.18F;
+    features.motion_energy_instant = 0.5F;
+    features.motion_energy_smoothed = 0.35F;
+    features.orientation = {0.8F, 0.0F, 0.6F};
     return features;
   }
 
