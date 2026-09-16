@@ -106,7 +106,8 @@ protocol::SyntheticAudioFrame SyntheticAudioMapper::map(const motion::MotionFeat
   write_group(frame, 0U, translation, config_.translation_band_gain, shape);
   write_group(frame, 4U, rotation, config_.rotation_band_gain, shape);
   write_group(frame, 8U, shake, config_.shake_band_gain, shape);
-  const float transient = clamp01(impact + shake * std::max(config_.shake_to_impact_crossfeed, 0.0F));
+  const float transient =
+      clamp01(impact + shake * std::max(config_.shake_to_impact_crossfeed, 0.0F));
   write_group(frame, 12U, transient, config_.impact_band_gain, shape);
 
   frame.magnitude = spectral_magnitude(frame);
