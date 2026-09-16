@@ -101,7 +101,7 @@ WU-002 and WU-003 are conceptually separable after WU-001, but the issue sequenc
 
 **Issue:** #2  
 **Implementation PR:** #9  
-**Status:** implementation complete on the PR branch; acceptance requires the final documented head to pass the full gate, merge to `main`, and close issue #2.
+**Status:** accepted. Squash-merged to `main` as `181d1a108a8887bc74008b545b94368fe10725b5`; issue #2 closed completed.
 
 ### Goal
 
@@ -121,39 +121,71 @@ Prove and debug the WLED/network side independently of IMU hardware.
 - host executable build and real CLI dry-run CI smoke test;
 - source/provenance-aware stock-WLED receive setup and troubleshooting guide.
 
-### Automated evidence
+### Accepted evidence
 
-The first substantive implementation head `4074abc6520cd24f7d794c0eb10754593d9be3ed` passed strict formatting, the native test suites, host executable build, CLI dry-run smoke test and ESP32-S3 build. The combined branch contains 20 named native tests: 10 accepted WU-001 protocol tests plus 10 WU-002 host/transport tests.
-
-### Evidence boundary
+Final implementation head `5af138acb1e0addc05094c5afa441971a59b9aeb` passed GitHub Actions run `35037828899`: formatting, 20 named native tests, host executable build, real CLI dry-run smoke and ESP32-S3 build.
 
 Current WLED source was re-verified on 2026-09-16 at `06ae26db67107cb3f6a3d107a92340035991a063`; latest stable release observed was v16.0.1. No physical receiver was available, so physical stock-WLED compatibility remains pending rather than inferred from source/loopback conformance.
 
 ### Exit condition
 
-A user can build a host tool that emits deterministic canonical V2 traffic, inspects multicast traffic/captures, and follows a documented stock-WLED receive procedure without any IMU hardware. Final roadmap acceptance additionally requires exact-head CI, merge verification on `main`, and issue #2 closure.
+Accepted: a user can build a host tool that emits deterministic canonical V2 traffic, inspects multicast traffic/captures, and follows a documented stock-WLED receive procedure without any IMU hardware.
 
 ---
 
 ## WU-003 — Deterministic IMU motion feature core
 
+**Issue:** #3  
+**Implementation PR:** #10  
+**Status:** implementation and RAG reconciliation complete on the PR branch; final acceptance requires the documented head to pass the full gate, merge to `main`, and close issue #3.
+
 ### Goal
 
 Create the sensor-independent signal-processing vocabulary for motion.
 
-### Deliverables
+### Delivered implementation
 
-- timestamped calibrated IMU sample contract;
-- gravity/linear-acceleration separation;
-- jerk, gyro/angular energy, orientation/tilt, impact detection and stillness state;
-- deterministic filters using elapsed time;
-- calibration/noise-floor model;
-- synthetic trace fixture corpus and native tests;
-- no WLED packet or Wi-Fi dependency in the core.
+- separate portable `lib/WledImuUdpMotion` library with no WLED packet, UDP, Wi-Fi, Arduino or QMI8658 dependency;
+- calibrated timestamped `ImuSample` contract with explicit validity and monotonic-time rejection behavior;
+- gravity estimate/magnitude/confidence and normalized gravity orientation;
+- gravity-separated linear acceleration, jerk, calibrated gyro/angular speed;
+- instantaneous and elapsed-time-smoothed composite motion energy;
+- bounded impact latch/refractory behavior;
+- hysteretic stillness state/confidence;
+- explicit `MotionConfig` and `MotionCalibration` rather than hidden globals;
+- stationary `CalibrationAccumulator` for gyro bias, gravity reference and measured accel/gyro noise floors;
+- elapsed-time first-order filters with long-step cap and no frame-count assumptions;
+- reusable nine-family synthetic trace corpus for stationary level/tilted, slow roll, translational sway, constant spin, tap, shake, motion→stillness and malformed injection;
+- ESP32-S3 smoke instantiation proving the portable motion library compiles in firmware without live sensor/network integration.
+
+### Locked behavioral baseline
+
+Default constants and exact semantics are recorded in `docs/rag/MOTION_MAPPING.md` and `docs/rag/WU003_IMPLEMENTATION.md`.
+
+Key invariants now covered by tests include:
+
+- stationary level converges to near-zero motion and stillness;
+- stationary tilt changes orientation without persistent motion energy;
+- spin and translation remain distinguishable;
+- impact assertion is bounded and refractory;
+- motion decays predictably to stillness;
+- malformed/non-finite and non-monotonic samples do not poison/advance state;
+- fixed initial state + fixed timestamped trace is repeatable;
+- deterministic 4.5/5.5 ms timing jitter remains finite and reaches stillness.
+
+### Automated evidence
+
+The first complete implementation head `24ff0e4be7b01fb406aedb0c5baabc4f5790b3d3` passed GitHub Actions run `35039697092`: strict formatting, all native suites, host executable build, real host CLI smoke and ESP32-S3 build.
+
+The combined branch contains 31 named native tests: 10 accepted protocol tests, 10 accepted host/transport tests and 11 WU-003 motion tests. The final documentation-reconciled head must pass this same complete gate before merge.
+
+### Evidence boundary
+
+WU-003 validates deterministic feature semantics on synthetic traces and embedded compilation. It does not claim physical QMI8658 noise/threshold validation, board-axis correctness, live sensor scheduling behavior, WLED mapping usefulness, Wi-Fi behavior or receiver interoperability.
 
 ### Exit condition
 
-Fixed host traces produce repeatable, semantically sensible motion features and decay cleanly to stillness.
+Fixed host traces produce repeatable, semantically sensible motion features, reject malformed timing/data cleanly and decay to stillness while the complete inherited CI gate remains green.
 
 ---
 
@@ -171,7 +203,8 @@ Turn stable motion semantics into expressive WLED Audio Reactive control data.
 - `sampleRaw`, `sampleSmth`, `samplePeak`, magnitude and major-peak semantics;
 - deterministic profile/configuration model;
 - host tests demonstrating distinguishable motion classes and bounded values;
-- mapper output wired through the accepted V2 encoder.
+- mapper output wired through the accepted V2 encoder;
+- reuse of the accepted WU-003 synthetic motion fixture corpus.
 
 ### Exit condition
 

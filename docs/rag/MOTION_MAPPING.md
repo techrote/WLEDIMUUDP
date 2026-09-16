@@ -9,71 +9,99 @@ This document separates two concerns that must remain independently tunable:
 
 The project must never collapse these into one opaque chain of magic constants.
 
+WU-003 now locks the first concrete motion-feature baseline. Exact public fields, default constants, elapsed-time semantics and acceptance evidence are recorded in `docs/rag/WU003_IMPLEMENTATION.md`.
+
 ## Input sample contract
 
-The host-testable motion core consumes timestamped samples containing at least:
+The host-testable motion core consumes `ImuSample` values containing:
 
-- acceleration X/Y/Z in a stable physical unit;
-- gyro X/Y/Z in a stable angular-rate unit;
-- monotonic timestamp or elapsed time;
-- validity flag / sensor status where relevant.
+- `timestamp_us`: strictly increasing monotonic microseconds;
+- `accel_g`: calibrated acceleration X/Y/Z in g;
+- `gyro_dps`: calibrated gyro X/Y/Z in degrees/second;
+- `valid`: upstream sample-validity flag.
 
-Hardware-specific axis swaps, sign corrections and scale conversion belong in the IMU adapter/configuration layer, not in generic feature extraction.
+Hardware-specific axis swaps, sign corrections, scale conversion, register behavior and sensor range/rate selection belong in the IMU adapter/configuration layer, not in generic feature extraction.
+
+Malformed/non-finite or non-monotonic samples are rejected without advancing motion filter state. The returned snapshot preserves the last accepted features with `input_valid=false`.
 
 ## Calibration
 
-Initial calibration should support:
+WU-003 provides `MotionCalibration` plus a stationary `CalibrationAccumulator` capable of estimating:
 
-- gyro zero/bias estimate while stationary;
-- accelerometer bias/scale assumptions documented per reference sensor;
-- configurable board-axis transform;
-- a stationary-noise estimate used to establish sensible deadbands.
+- gyro zero/bias vector;
+- gravity-reference magnitude;
+- acceleration-magnitude noise floor;
+- gyro residual noise floor.
+
+The default accumulator requires 64 valid finite samples. WU-003 deliberately does not decide how later firmware proves the board is stationary before accepting startup calibration samples.
 
 Calibration must never silently depend on the board’s LEDs or display hardware.
 
 ## Motion feature extraction
 
-The first implementation should expose a versioned `MotionFeatures` structure with at least:
+`MotionFeatures` exposes:
 
 - estimated gravity vector;
 - gravity magnitude/confidence;
 - dynamic/linear acceleration vector (`accel - gravity`);
-- dynamic acceleration magnitude;
-- jerk or rate-of-change magnitude;
-- gyro/angular-velocity vector;
-- angular-energy magnitude;
-- normalised tilt/orientation components suitable for shaping the spectrum;
-- motion-energy instantaneous value;
-- smoothed motion-energy value;
-- impact/tap candidate with hysteresis/latch semantics;
-- stillness/confidence state.
+- deadbanded dynamic acceleration magnitude;
+- jerk/rate-of-change magnitude;
+- gyro/angular-velocity vector after calibrated bias removal;
+- deadbanded angular-speed magnitude;
+- normalized gravity orientation vector;
+- instantaneous composite motion energy;
+- smoothed motion energy;
+- bounded impact/tap latch state;
+- stillness state/confidence;
+- accepted timestamp and input-validity state.
 
-## Filtering baseline
+The core lives in `lib/WledImuUdpMotion` and has no Arduino, Wi-Fi, UDP, WLED-packet or QMI8658 dependency.
 
-The exact constants are implementation work, but the initial design should use simple, explainable fixed-state filters:
+## Locked WU-003 filtering baseline
 
-- low-pass estimate for gravity;
-- derived high-pass/dynamic acceleration from the gravity subtraction;
-- EWMA or equivalent for smoothed motion energy;
-- threshold + hysteresis/refractory interval for impacts;
-- explicit decay toward zero during stillness.
+WU-003 uses simple fixed-state elapsed-time filters. The first-order smoothing coefficient is:
 
-Avoid heavyweight DSP until profiling or receiver behavior demonstrates a need.
+`alpha = dt / (tau + dt)`
 
-All filters must use elapsed time or a well-defined fixed cadence and be deterministic under host fixtures.
+with positive accepted `dt` capped at `0.10 s` before state updates.
+
+Default configuration:
+
+- gravity low-pass time constant: `0.35 s`;
+- motion-energy smoothing time constant: `0.18 s`;
+- gravity-confidence tolerance: `0.25 g`;
+- acceleration deadband: `2.5 ×` calibrated acceleration noise floor;
+- gyro deadband: `2.5 ×` calibrated gyro noise floor;
+- jerk deadband: `0.50 g/s`;
+- composite energy weights: acceleration `1.0`, jerk `0.08`, angular speed `0.0125`;
+- stillness enter/exit thresholds: `0.050` / `0.080`;
+- stillness hold: `0.45 s`;
+- impact thresholds: `0.65 g` linear acceleration and `8.0 g/s` jerk;
+- impact release acceleration: `0.20 g`;
+- impact latch: `0.08 s`;
+- impact refractory interval: `0.22 s`.
+
+The first accepted sample initializes gravity directly from measured acceleration and therefore does not fabricate startup dynamic acceleration or jerk.
+
+These values are the WU-003 deterministic baseline, not claims of final physical-QMI8658 tuning. Changes require trace evidence and documentation reconciliation.
 
 ## Stillness behavior
 
 Stillness is a first-class product state.
 
-Expected behavior:
+Current behavior:
 
-- static orientation alone does not create continuous volume;
-- small sensor noise is suppressed by calibration/noise-floor logic;
-- after movement stops, `sampleRaw` falls quickly and `sampleSmth` decays predictably;
-- synthetic bands decay to near-zero rather than freezing at their previous shape;
-- `samplePeak` cannot remain latched indefinitely;
-- the output never generates NaN/Inf values.
+- static orientation alone does not create continuous motion energy;
+- calibrated noise floors define acceleration/gyro deadbands;
+- energy at or below the enter threshold accumulates quiet elapsed time;
+- energy at or above the exit threshold resets that timer;
+- `still=true` after `0.45 s` of accumulated quiet time;
+- stillness confidence is the bounded fraction of that hold interval;
+- smoothed energy decays predictably during quiet input;
+- invalid samples do not poison or advance state;
+- outputs remain finite for the deterministic fixture corpus.
+
+Synthetic bands, `sampleRaw`, `sampleSmth` and `samplePeak` remain WU-004 responsibilities.
 
 ## Synthetic-audio frame
 
@@ -104,7 +132,7 @@ Within those groups:
 - fast rotation should look different from linear shake even when total energy is similar;
 - impacts should produce a broadband/high-band transient and assert `samplePeak` briefly.
 
-The exact band weights are not frozen by this planning document. They become a versioned contract when implementation fixtures demonstrate useful behavior across stock WLED effects.
+The exact band weights are not frozen by WU-003. They become a versioned WU-004 contract when implementation fixtures demonstrate useful behavior across stock WLED effects.
 
 ## Major-peak semantics
 
@@ -131,7 +159,7 @@ Only one conservative default profile is required for the MVP. Profiles must be 
 
 ## Synthetic trace fixtures
 
-Host tests should include deterministic traces for at least:
+WU-003 provides reusable deterministic traces for:
 
 - stationary level orientation;
 - stationary tilted orientation;
@@ -143,16 +171,9 @@ Host tests should include deterministic traces for at least:
 - motion followed by long stillness;
 - malformed/non-finite sample sanitisation.
 
-Tests should check both qualitative invariants and exact deterministic outputs where appropriate.
+Every generated trace contains at least 400 timestamped samples. WU-004 should reuse this corpus rather than introducing an unrelated motion language.
 
-Examples of useful invariants:
-
-- stationary tilt changes orientation features but leaves motion energy near zero;
-- spin produces more rotational-band energy than a matched translational sway;
-- shake spreads energy more broadly than a slow roll;
-- tap asserts exactly bounded peak frames;
-- stillness decays output toward silence;
-- no output band exceeds `254`.
+WU-003 tests lock the important feature invariants: tilt without false motion, rotation/translation distinction, bounded impact assertion, predictable stillness decay, malformed/non-monotonic rejection, deterministic replay, calibration behavior and finite convergence under deterministic 4.5/5.5 ms timing jitter.
 
 ## Tuning discipline
 
@@ -163,5 +184,7 @@ A mapping change that “looks better” on one effect may hurt other WLED audio
 - test multiple stock effects when hardware is available;
 - avoid coupling effect-specific hacks into the generic motion core;
 - version or document materially changed profile behavior.
+
+Motion-core constants are likewise not effect knobs: change them only when feature-level evidence justifies the semantic change.
 
 The project optimises for expressive stock-WLED interoperability, not acoustic correctness.
