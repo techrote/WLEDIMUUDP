@@ -49,6 +49,7 @@ private:
 };
 
 float spectral_magnitude(const protocol::SyntheticAudioFrame &frame) noexcept;
-float spectral_major_peak(const protocol::SyntheticAudioFrame &frame, float quiet_value_hz) noexcept;
+float spectral_major_peak(const protocol::SyntheticAudioFrame &frame,
+                          float quiet_value_hz) noexcept;
 
 } // namespace wledimuudp::mapping
