@@ -29,39 +29,31 @@ MotionFeatures run_trace(MotionFeatureExtractor &extractor, const MotionTraceKin
 
 void assert_finite_features(const MotionFeatures &features) {
   const std::array<float, 18> values{
-      features.gravity_g.x,
-      features.gravity_g.y,
-      features.gravity_g.z,
-      features.gravity_magnitude_g,
-      features.gravity_confidence,
-      features.linear_accel_g.x,
-      features.linear_accel_g.y,
-      features.linear_accel_g.z,
-      features.linear_accel_magnitude_g,
-      features.jerk_g_per_s,
-      features.gyro_dps.x,
-      features.gyro_dps.y,
-      features.gyro_dps.z,
-      features.angular_speed_dps,
-      features.orientation.x,
-      features.orientation.y,
-      features.orientation.z,
-      features.motion_energy_smoothed,
+      features.gravity_g.x,         features.gravity_g.y,        features.gravity_g.z,
+      features.gravity_magnitude_g, features.gravity_confidence, features.linear_accel_g.x,
+      features.linear_accel_g.y,    features.linear_accel_g.z,   features.linear_accel_magnitude_g,
+      features.jerk_g_per_s,        features.gyro_dps.x,         features.gyro_dps.y,
+      features.gyro_dps.z,          features.angular_speed_dps,  features.orientation.x,
+      features.orientation.y,       features.orientation.z,      features.motion_energy_smoothed,
   };
   for (const float value : values) {
     TEST_ASSERT_TRUE(std::isfinite(value));
   }
   TEST_ASSERT_TRUE(features.gravity_confidence >= 0.0F && features.gravity_confidence <= 1.0F);
-  TEST_ASSERT_TRUE(features.stillness_confidence >= 0.0F &&
-                   features.stillness_confidence <= 1.0F);
+  TEST_ASSERT_TRUE(features.stillness_confidence >= 0.0F && features.stillness_confidence <= 1.0F);
 }
 
 void test_fixture_corpus_is_complete_and_reusable() {
   constexpr std::array<MotionTraceKind, 9> kinds{
-      MotionTraceKind::kStationaryLevel, MotionTraceKind::kStationaryTilted,
-      MotionTraceKind::kSlowRoll, MotionTraceKind::kTranslationalSway,
-      MotionTraceKind::kConstantSpin, MotionTraceKind::kTap, MotionTraceKind::kShake,
-      MotionTraceKind::kMotionThenStill, MotionTraceKind::kMalformedInjection,
+      MotionTraceKind::kStationaryLevel,
+      MotionTraceKind::kStationaryTilted,
+      MotionTraceKind::kSlowRoll,
+      MotionTraceKind::kTranslationalSway,
+      MotionTraceKind::kConstantSpin,
+      MotionTraceKind::kTap,
+      MotionTraceKind::kShake,
+      MotionTraceKind::kMotionThenStill,
+      MotionTraceKind::kMalformedInjection,
   };
   for (const auto kind : kinds) {
     const auto trace = wledimuudp::test_fixture::make_motion_trace(kind);
