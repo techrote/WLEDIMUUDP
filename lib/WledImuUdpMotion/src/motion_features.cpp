@@ -8,13 +8,19 @@ namespace {
 
 constexpr float kMicrosToSeconds = 1.0e-6F;
 
-Vec3 add(const Vec3 &a, const Vec3 &b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-Vec3 subtract(const Vec3 &a, const Vec3 &b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+Vec3 add(const Vec3 &a, const Vec3 &b) {
+  return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+Vec3 subtract(const Vec3 &a, const Vec3 &b) {
+  return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
 Vec3 scale(const Vec3 &value, const float scalar) {
   return {value.x * scalar, value.y * scalar, value.z * scalar};
 }
 
-float clamp01(const float value) { return std::clamp(value, 0.0F, 1.0F); }
+float clamp01(const float value) {
+  return std::clamp(value, 0.0F, 1.0F);
+}
 
 float deadband(const float value, const float threshold) {
   return value > threshold ? value - threshold : 0.0F;
@@ -78,9 +84,13 @@ bool CalibrationAccumulator::add(const ImuSample &sample) {
   return true;
 }
 
-bool CalibrationAccumulator::ready() const { return count_ >= minimum_samples_; }
+bool CalibrationAccumulator::ready() const {
+  return count_ >= minimum_samples_;
+}
 
-std::size_t CalibrationAccumulator::sample_count() const { return count_; }
+std::size_t CalibrationAccumulator::sample_count() const {
+  return count_;
+}
 
 bool CalibrationAccumulator::finalize(MotionCalibration &out) const {
   if (!ready()) {
@@ -91,9 +101,8 @@ bool CalibrationAccumulator::finalize(MotionCalibration &out) const {
   out.gyro_bias_dps = scale(gyro_sum_, 1.0F / count);
   out.gravity_reference_g = accel_magnitude_sum_ / count;
 
-  const float accel_variance =
-      std::max(0.0F, accel_magnitude_sq_sum_ / count -
-                         out.gravity_reference_g * out.gravity_reference_g);
+  const float accel_variance = std::max(
+      0.0F, accel_magnitude_sq_sum_ / count - out.gravity_reference_g * out.gravity_reference_g);
   out.accel_noise_floor_g = std::max(0.0005F, std::sqrt(accel_variance));
 
   const float mean_gyro_magnitude_sq = gyro_deviation_sq_sum_ / count;
@@ -126,9 +135,13 @@ void MotionFeatureExtractor::set_calibration(const MotionCalibration &calibratio
   reset();
 }
 
-const MotionCalibration &MotionFeatureExtractor::calibration() const { return calibration_; }
+const MotionCalibration &MotionFeatureExtractor::calibration() const {
+  return calibration_;
+}
 
-const MotionConfig &MotionFeatureExtractor::config() const { return config_; }
+const MotionConfig &MotionFeatureExtractor::config() const {
+  return config_;
+}
 
 MotionFeatures MotionFeatureExtractor::process(const ImuSample &sample) {
   if (!finite_sample(sample) || (initialized_ && sample.timestamp_us <= last_timestamp_us_)) {
@@ -169,18 +182,19 @@ MotionFeatures MotionFeatureExtractor::process(const ImuSample &sample) {
   gravity_ = add(gravity_, scale(subtract(sample.accel_g, gravity_), gravity_alpha));
 
   const Vec3 linear = subtract(sample.accel_g, gravity_);
-  const float linear_magnitude = deadband(
-      magnitude(linear), calibration_.accel_noise_floor_g * config_.accel_deadband_multiplier);
-  const float jerk = deadband(magnitude(subtract(linear, previous_linear_)) / std::max(dt_s, 1.0e-6F),
-                              config_.jerk_deadband_g_per_s);
+  const float linear_magnitude = deadband(magnitude(linear), calibration_.accel_noise_floor_g *
+                                                                 config_.accel_deadband_multiplier);
+  const float jerk =
+      deadband(magnitude(subtract(linear, previous_linear_)) / std::max(dt_s, 1.0e-6F),
+               config_.jerk_deadband_g_per_s);
   previous_linear_ = linear;
 
   const float angular_speed =
       deadband(magnitude(corrected_gyro),
                calibration_.gyro_noise_floor_dps * config_.gyro_deadband_multiplier);
-  const float instant_energy = std::max(
-      0.0F, linear_magnitude * config_.accel_energy_weight + jerk * config_.jerk_energy_weight +
-                angular_speed * config_.angular_energy_weight);
+  const float instant_energy = std::max(0.0F, linear_magnitude * config_.accel_energy_weight +
+                                                  jerk * config_.jerk_energy_weight +
+                                                  angular_speed * config_.angular_energy_weight);
   const float energy_alpha = low_pass_alpha(dt_s, config_.energy_smoothing_time_constant_s);
   const float smoothed_energy =
       last_.motion_energy_smoothed + energy_alpha * (instant_energy - last_.motion_energy_smoothed);
