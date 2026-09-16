@@ -68,8 +68,8 @@ WiFiUDP udp;
 
 FirmwareCounters counters{};
 MotionFeatures latest_features{};
-SenderMode sender_mode = wledimuudp::config::kDiagnosticModeOnBoot ? SenderMode::kDiagnostic
-                                                                   : SenderMode::kLive;
+SenderMode sender_mode =
+    wledimuudp::config::kDiagnosticModeOnBoot ? SenderMode::kDiagnostic : SenderMode::kLive;
 bool sensor_healthy = false;
 bool calibrated = false;
 bool latest_features_valid = false;
@@ -358,7 +358,8 @@ void setup() {
   print_commands();
 
   if (!credentials_configured()) {
-    Serial.println("Wi-Fi credentials are not configured; copy config/wifi.example.hpp to wifi.local.hpp.");
+    Serial.println("Wi-Fi credentials are not configured; copy config/wifi.example.hpp "
+                   "to wifi.local.hpp.");
   }
 
   const std::uint64_t now_us = monotonic_clock.extend(micros());
