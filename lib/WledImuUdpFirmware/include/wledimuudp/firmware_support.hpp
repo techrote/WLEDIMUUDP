@@ -58,8 +58,7 @@ inline constexpr std::size_t kQmi8658MotionDataSize = 12U;
 
 bool decode_qmi8658_motion_data(const std::uint8_t *data, std::size_t size,
                                 std::uint64_t timestamp_us, const Qmi8658Config &config,
-                                const AxisTransform &transform,
-                                motion::ImuSample &out) noexcept;
+                                const AxisTransform &transform, motion::ImuSample &out) noexcept;
 
 struct CalibrationPolicy {
   std::size_t minimum_samples{256U};
@@ -149,8 +148,8 @@ enum class SenderMode : std::uint8_t {
   kDiagnostic,
 };
 
-bool can_emit_packet(SenderMode mode, bool wifi_connected, bool sensor_healthy,
-                     bool calibrated, bool features_valid) noexcept;
+bool can_emit_packet(SenderMode mode, bool wifi_connected, bool sensor_healthy, bool calibrated,
+                     bool features_valid) noexcept;
 
 protocol::SyntheticAudioFrame make_diagnostic_frame() noexcept;
 
