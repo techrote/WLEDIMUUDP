@@ -71,6 +71,14 @@ void assert_frame_finite_and_bounded(const SyntheticAudioFrame &frame) {
   }
 }
 
+void assert_trace_outputs_finite_and_bounded(const MotionTraceKind kind) {
+  MotionFeatureExtractor extractor;
+  SyntheticAudioMapper mapper;
+  for (const auto &sample : wledimuudp::test_fixture::make_motion_trace(kind)) {
+    assert_frame_finite_and_bounded(mapper.map(extractor.process(sample)));
+  }
+}
+
 void test_balanced_profile_contract_and_centers_are_stable() {
   TEST_ASSERT_EQUAL_UINT16(1U, wledimuudp::mapping::kBalancedProfileVersion);
   TEST_ASSERT_EQUAL_UINT32(16U, wledimuudp::mapping::kBalancedBandCentersHz.size());
@@ -162,21 +170,15 @@ void test_motion_then_stillness_clears_spectrum_and_peak() {
 }
 
 void test_all_trace_outputs_are_finite_and_bounded() {
-  constexpr std::array<MotionTraceKind, 9> kinds{
-      MotionTraceKind::kStationaryLevel, MotionTraceKind::kStationaryTilted,
-      MotionTraceKind::kSlowRoll, MotionTraceKind::kTranslationalSway,
-      MotionTraceKind::kConstantSpin, MotionTraceKind::kTap,
-      MotionTraceKind::kShake, MotionTraceKind::kMotionThenStill,
-      MotionTraceKind::kMalformedInjection,
-  };
-
-  for (const auto kind : kinds) {
-    MotionFeatureExtractor extractor;
-    SyntheticAudioMapper mapper;
-    for (const auto &sample : wledimuudp::test_fixture::make_motion_trace(kind)) {
-      assert_frame_finite_and_bounded(mapper.map(extractor.process(sample)));
-    }
-  }
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kStationaryLevel);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kStationaryTilted);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kSlowRoll);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kTranslationalSway);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kConstantSpin);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kTap);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kShake);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kMotionThenStill);
+  assert_trace_outputs_finite_and_bounded(MotionTraceKind::kMalformedInjection);
 }
 
 void test_major_peak_tracks_synthetic_spectrum_centroid() {
