@@ -9,7 +9,7 @@ This document separates two concerns that must remain independently tunable:
 
 The project must never collapse these into one opaque chain of magic constants.
 
-WU-003 now locks the first concrete motion-feature baseline. Exact public fields, default constants, elapsed-time semantics and acceptance evidence are recorded in `docs/rag/WU003_IMPLEMENTATION.md`.
+WU-003 locks the first concrete motion-feature baseline. WU-004 now locks the first concrete mapping baseline, **Balanced-v1**. Exact mapping constants and evidence boundaries are also recorded in `docs/rag/WU004_IMPLEMENTATION.md`.
 
 ## Input sample contract
 
@@ -89,7 +89,7 @@ These values are the WU-003 deterministic baseline, not claims of final physical
 
 Stillness is a first-class product state.
 
-Current behavior:
+Current feature behavior:
 
 - static orientation alone does not create continuous motion energy;
 - calibrated noise floors define acceleration/gyro deadbands;
@@ -101,61 +101,92 @@ Current behavior:
 - invalid samples do not poison or advance state;
 - outputs remain finite for the deterministic fixture corpus.
 
-Synthetic bands, `sampleRaw`, `sampleSmth` and `samplePeak` remain WU-004 responsibilities.
+Balanced-v1 preserves these semantics at the synthetic-audio layer: stationary level and stationary tilted traces converge to zero raw level, zero spectrum, zero magnitude and quiet major peak; an invalid feature snapshot cannot manufacture a new peak.
 
 ## Synthetic-audio frame
 
-The mapper consumes `MotionFeatures` and produces:
+`lib/WledImuUdpMapping` consumes `MotionFeatures` and produces the accepted protocol `SyntheticAudioFrame`:
 
-- `sampleRaw` — immediate composite motion energy;
-- `sampleSmth` — perceptually useful smoothed energy;
-- `samplePeak` — short peak/impact event;
-- `fftResult[16]` — synthetic 16-band spectrum;
-- `FFT_Magnitude` — overall spectral/activity magnitude;
-- `FFT_MajorPeak` — frequency-like descriptor derived from the synthetic spectrum.
+- `sampleRaw` — `motion_energy_instant × 72`, bounded to `0..255`;
+- `sampleSmth` — `motion_energy_smoothed × 72`, bounded to `0..255`;
+- `samplePeak` — one-frame rising-edge event derived from the accepted WU-003 impact latch;
+- `fftResult[16]` — synthetic 16-band spectrum, each value bounded to `0..254`;
+- `FFT_Magnitude` — RMS amplitude of the 16 synthetic bands;
+- `FFT_MajorPeak` — weighted centroid of the locked center table below, with quiet value `1.0`.
 
 The mapping is intentionally not a physical acoustic FFT.
 
-## Planned 16-band semantics
+## Locked Balanced-v1 16-band semantics
 
-The initial reviewed mapping uses broad motion semantics instead of one-to-one axes:
+Balanced-v1 uses broad motion semantics instead of one-to-one axes:
 
-- **bands 0–3:** slow/sweeping/translational movement energy;
-- **bands 4–7:** rotation/roll/yaw-dominant movement;
-- **bands 8–11:** shake/jerk/high-frequency movement;
-- **bands 12–15:** impacts, flicks and sharp transients.
+- **bands 0–3:** linear/translational acceleration, normalised against `0.22 g`, gain `1.00`;
+- **bands 4–7:** rotation/angular speed, normalised against `120 dps`, gain `0.95`;
+- **bands 8–11:** shake/jerk activity, normalised against `18 g/s`, gain `0.90`;
+- **bands 12–15:** impact/transient activity, gain `1.00`, with `0.20 ×` normalised shake crossfeed.
 
-Within those groups:
+Continuous sources are clamped to `0..1` before band synthesis. The high/transient group can therefore react to sharp broadband movement without asserting `samplePeak`; `samplePeak` is reserved for a rising edge of the actual WU-003 impact latch.
 
-- tilt/orientation may bias where energy sits left-to-right across nearby bands;
-- direction may shape the spectrum but should not create energy when the sender is motionless;
-- fast rotation should look different from linear shake even when total energy is similar;
-- impacts should produce a broadband/high-band transient and assert `samplePeak` briefly.
+### Orientation shaping
 
-The exact band weights are not frozen by WU-003. They become a versioned WU-004 contract when implementation fixtures demonstrate useful behavior across stock WLED effects.
+Tilt/orientation biases **where existing energy sits within each four-band group**. It never creates energy by itself.
 
-## Major-peak semantics
+Balanced-v1 forms the signed shape control:
 
-`FFT_MajorPeak` is consumed by some WLED effects as a frequency-like quantity. Because the spectrum is synthetic, WLEDIMUUDP should derive it from a documented canonical center table or weighted centroid rather than inventing arbitrary per-packet values.
+`orientation.x × 0.75 + orientation.y × 0.25`
 
-Requirements:
+clamps it to `-1..1`, multiplies it by the default orientation-bias strength `0.65`, and shifts a normalized triangular four-band distribution accordingly.
+
+Tests lock that opposite tilts preserve the same raw/smoothed level while moving spectral energy and the resulting major peak coherently left/right. Stationary tilt remains silent.
+
+## Locked major-peak semantics
+
+The canonical Balanced-v1 center table is:
+
+`[65, 92, 131, 185, 262, 370, 523, 740, 1047, 1480, 2093, 2960, 4186, 5920, 8372, 11840]`
+
+For a non-zero spectrum:
+
+`FFT_MajorPeak = sum(band[i] × center[i]) / sum(band[i])`
+
+For a zero spectrum the default quiet value is `1.0`.
+
+Requirements locked by tests:
 
 - deterministic for identical frames;
-- finite and non-negative;
+- finite and positive;
 - stable during quiet output;
-- moves coherently as the synthetic spectrum moves;
-- center-table values and quiet value must be locked by tests once chosen.
+- low-band energy produces a lower major peak than middle/high-band energy;
+- exact single-band frames resolve to that band’s center value.
+
+## Balanced-v1 configuration defaults
+
+`MappingConfig` defaults are:
+
+- profile: `kBalancedV1`;
+- level gain: `72.0`;
+- translation full scale: `0.22 g`;
+- rotation full scale: `120 dps`;
+- shake full scale: `18 g/s`;
+- translation band gain: `1.00`;
+- rotation band gain: `0.95`;
+- shake band gain: `0.90`;
+- impact band gain: `1.00`;
+- shake→impact crossfeed: `0.20`;
+- orientation bias strength: `0.65`;
+- quiet major peak: `1.0`.
+
+Configuration is explicit and deterministic. Changing it does not alter the WLED Audio Sync packet ABI.
 
 ## Mapping profiles
 
-The architecture should allow multiple mapping profiles without duplicating the protocol/network stack. Candidate profiles after MVP include:
+Balanced-v1 is the only implemented MVP profile. The architecture may later support additional profiles without duplicating the protocol/network stack. Candidate future profiles remain:
 
-- **Balanced** — default mixture of translation, rotation, shake and impact;
 - **Flow** — emphasises tilt-shaped sweeps and slow movement;
 - **Percussive** — emphasises jerk/taps/impacts;
 - **Spin** — emphasises angular motion and spectral movement.
 
-Only one conservative default profile is required for the MVP. Profiles must be data/configuration over the same tested feature primitives, not unrelated implementations.
+Any additional profile must be configuration/data over the same tested feature primitives rather than an unrelated signal pipeline.
 
 ## Synthetic trace fixtures
 
@@ -171,20 +202,28 @@ WU-003 provides reusable deterministic traces for:
 - motion followed by long stillness;
 - malformed/non-finite sample sanitisation.
 
-Every generated trace contains at least 400 timestamped samples. WU-004 should reuse this corpus rather than introducing an unrelated motion language.
+WU-004 reuses this corpus directly. The mapper suite locks silence, spectral-class separation, bounded outputs, one-shot peaks, orientation shaping, deterministic configuration and byte-identical mapper→WU-001 encoder behavior.
 
-WU-003 tests lock the important feature invariants: tilt without false motion, rotation/translation distinction, bounded impact assertion, predictable stillness decay, malformed/non-monotonic rejection, deterministic replay, calibration behavior and finite convergence under deterministic 4.5/5.5 ms timing jitter.
+## Host inspection
+
+The native `mapping_probe` target accepts:
+
+`still`, `sway`, `spin`, `shake`, `impact`, `tilt-left`, or `tilt-right`.
+
+It prints the Balanced-v1 semantic frame, 16 bands and exact 44-byte Audio Sync V2 packet. This provides a concrete inspection seam before live IMU or network integration.
 
 ## Tuning discipline
 
 A mapping change that “looks better” on one effect may hurt other WLED audio-reactive effects. Therefore tuning PRs should:
 
-- preserve trace fixtures;
+- preserve the WU-003 trace fixtures;
 - add evidence for any changed semantic;
 - test multiple stock effects when hardware is available;
 - avoid coupling effect-specific hacks into the generic motion core;
-- version or document materially changed profile behavior.
+- version or explicitly document materially changed profile behavior.
 
 Motion-core constants are likewise not effect knobs: change them only when feature-level evidence justifies the semantic change.
+
+Balanced-v1 is an automated deterministic baseline, not a claim of final physical perceptual tuning. WU-005/WU-006 own live sensor/network integration and physical stock-WLED evidence.
 
 The project optimises for expressive stock-WLED interoperability, not acoustic correctness.

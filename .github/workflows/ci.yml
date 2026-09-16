@@ -37,5 +37,11 @@ jobs:
       - name: Smoke-test host probe
         run: ./.pio/build/host_probe/program send --dry-run --pattern single-band --frames 2
 
+      - name: Build motion mapper probe
+        run: python -m platformio run -e mapping_probe
+
+      - name: Smoke-test motion mapper probe
+        run: ./.pio/build/mapping_probe/program spin
+
       - name: Build ESP32-S3 reference firmware
         run: python -m platformio run -e esp32s3
