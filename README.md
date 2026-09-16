@@ -6,7 +6,7 @@ Its purpose is deliberately narrow: an ESP32-class sender reads an IMU, converts
 
 ## Current implementation state
 
-WU-001 through WU-004 establish the complete pure-core path before live hardware/network integration:
+WU-001 through WU-005 establish the complete reference-sender path:
 
 - explicit host-testable WLED Audio Sync V2 encoder and strict decoder;
 - direct-review 44-byte golden fixture;
@@ -15,12 +15,15 @@ WU-001 through WU-004 establish the complete pure-core path before live hardware
 - versioned **Balanced-v1** motion→synthetic-audio mapping;
 - four semantic spectrum groups for translation, rotation, shake/jerk and impacts;
 - orientation-dependent spectral shaping without false activity at rest;
-- deterministic magnitude/major-peak and one-shot packet peak semantics;
-- native mapper inspection tool that prints the semantic frame and exact encoded packet;
-- ESP32-S3 smoke build exercising motion→mapping→44-byte encoding;
-- deterministic formatting/CI and secret-safe configuration skeleton.
+- native mapper inspection tooling with exact packet output;
+- explicit Waveshare ESP32-S3-Matrix + QMI8658/QMI8658C reference-board profile;
+- direct QMI8658 I2C adapter with startup calibration and failure re-probe;
+- live motion→mapping→canonical 44-byte encoder→Wi-Fi multicast firmware path;
+- secret-safe station-mode Wi-Fi configuration and bounded reconnect behavior;
+- sensor-independent known-frame diagnostic mode for separating network/WLED faults from IMU faults;
+- deterministic formatting, native tests and reference ESP32-S3 CI build.
 
-Live QMI8658/QMI8658C acquisition and ESP32 Wi-Fi multicast are the next WU-005 milestone. Physical stock-WLED effect validation/tuning remains WU-006.
+Physical stock-WLED effect validation, board-axis confirmation and perceptual mapping refinement remain WU-006 evidence/tuning work. Green CI is not a physical hardware claim.
 
 ## Quick start
 
@@ -33,6 +36,44 @@ python -m platformio run -e host_probe
 python -m platformio run -e mapping_probe
 python -m platformio run -e esp32s3
 ```
+
+### Configure the reference sender
+
+Copy the safe template and edit only the ignored local copy:
+
+```powershell
+Copy-Item config\wifi.example.hpp config\wifi.local.hpp
+notepad config\wifi.local.hpp
+```
+
+Set `kWifiSsid` and `kWifiPassword`. The default sender target is stock WLED Audio Sync multicast `239.0.0.1:11988` at 50 packets/s; those values are also configurable in the local header. Never commit `config/wifi.local.hpp`.
+
+The WU-005 reference hardware is the Waveshare ESP32-S3-Matrix with onboard QMI8658/QMI8658C. The firmware uses GPIO11 SDA, GPIO12 SCL, 400 kHz I2C and board address `0x6B`. It does **not** initialise or depend on the onboard 8×8 RGB matrix.
+
+### Build, flash and monitor
+
+Replace `<PORT>` with the board's serial port:
+
+```powershell
+python -m platformio run -e esp32s3
+python -m platformio run -e esp32s3 -t upload --upload-port <PORT>
+python -m platformio device monitor -p <PORT> -b 115200
+```
+
+At startup the sender probes/configures the IMU and asks for a stationary calibration window. Keep the board still until serial reports `Calibration accepted`. The firmware reports one-second IMU sample and successful-packet counts so physical scheduling can be verified rather than assumed.
+
+Runtime serial commands:
+
+- `d` — diagnostic mode: transmit a fixed known synthetic Audio Sync frame without requiring a healthy/calibrated IMU;
+- `l` — return to live IMU mode;
+- `r` — restart stationary calibration;
+- `?` — print the command summary.
+
+Live transmission is automatically paused on sensor failure, invalid calibration, missing/currently invalid motion features, or Wi-Fi disconnection. Wi-Fi reconnect does not reset accepted motion/calibration state; a sensor failure does require re-probe and fresh calibration.
+
+See [`docs/rag/WU005_IMPLEMENTATION.md`](docs/rag/WU005_IMPLEMENTATION.md) for the exact QMI8658 register/range/rate choices and evidence boundary.
+
+## Host compatibility tools
 
 On Windows, exercise the network host probe without sending packets:
 
@@ -64,8 +105,6 @@ Decode the committed golden packet:
 
 See [`docs/rag/HOST_PROBE.md`](docs/rag/HOST_PROBE.md) for network probe patterns/listening/receiver setup, and [`docs/rag/WU004_IMPLEMENTATION.md`](docs/rag/WU004_IMPLEMENTATION.md) for the locked Balanced-v1 mapping contract.
 
-The `esp32s3` firmware remains a compile/smoke target at this stage. It does not yet join Wi-Fi, read a live IMU, or drive LEDs.
-
 ## Protocol baseline
 
 The project targets WLED Audio Sync V2 compatibility:
@@ -78,13 +117,13 @@ The project targets WLED Audio Sync V2 compatibility:
 - magnitude at offset 36;
 - major peak at offset 40;
 - default multicast destination `239.0.0.1:11988`;
-- host probe default/max send rate 50 Hz.
+- default/max intended sender cadence 50 Hz.
 
 The canonical encoder writes the wire layout explicitly; it does not transmit a native packed C++ struct. Motion/mapping code produces semantic frames and does not duplicate the packet ABI.
 
 ## Credentials
 
-`config/wifi.example.hpp` is a placeholder for WU-005 ESP32 transport work. When Wi-Fi is implemented, copy it to `config/wifi.local.hpp`; that local file is ignored by Git. Never commit real SSIDs, passwords, tokens, or other secrets.
+`config/wifi.example.hpp` is the committed configuration template. Copy it to `config/wifi.local.hpp`; that local file is ignored by Git. A clean checkout deliberately compiles with placeholder credentials but makes no Wi-Fi connection attempt until a real local SSID is configured.
 
 ## Authoritative documentation
 
@@ -98,10 +137,11 @@ The project RAG pack lives under [`docs/rag/`](docs/rag/):
 - [`HARDWARE.md`](docs/rag/HARDWARE.md) — reference hardware and portability rules.
 - [`TESTING_AND_CI.md`](docs/rag/TESTING_AND_CI.md) — automated verification and evidence rules.
 - [`ROADMAP.md`](docs/rag/ROADMAP.md) — reviewed implementation sequence and accepted milestones.
-- [`SOURCES.md`](docs/rag/SOURCES.md) — pinned upstream WLED provenance and re-verification rules.
+- [`SOURCES.md`](docs/rag/SOURCES.md) — pinned upstream WLED and hardware provenance.
 - [`ISSUE_INDEX.md`](docs/rag/ISSUE_INDEX.md) — implementation issue/dependency index.
 - [`WU001_IMPLEMENTATION.md`](docs/rag/WU001_IMPLEMENTATION.md) — WU-001 bootstrap/protocol choices.
 - [`WU003_IMPLEMENTATION.md`](docs/rag/WU003_IMPLEMENTATION.md) — WU-003 motion-core contract.
 - [`WU004_IMPLEMENTATION.md`](docs/rag/WU004_IMPLEMENTATION.md) — WU-004 Balanced-v1 mapping contract.
+- [`WU005_IMPLEMENTATION.md`](docs/rag/WU005_IMPLEMENTATION.md) — WU-005 board, sensor, scheduling and transport contract.
 
 [`AGENTS.md`](AGENTS.md) defines the repository-wide rules for autonomous implementation work.

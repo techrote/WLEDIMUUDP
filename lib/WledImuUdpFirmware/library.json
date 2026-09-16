@@ -1,0 +1,11 @@
+{
+  "name": "WledImuUdpFirmware",
+  "version": "0.1.0",
+  "description": "Host-testable board, calibration, scheduling and sender runtime support",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}
