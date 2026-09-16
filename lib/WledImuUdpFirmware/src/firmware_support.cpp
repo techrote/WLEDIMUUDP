@@ -28,8 +28,9 @@ float signed_component(const motion::Vec3 &value, const std::uint8_t index,
 }
 
 std::int16_t decode_i16_le(const std::uint8_t low, const std::uint8_t high) noexcept {
-  std::int32_t value = static_cast<std::int32_t>(low) |
-                       (static_cast<std::int32_t>(high) << 8);
+  const std::int32_t low_bits = static_cast<std::int32_t>(low);
+  const std::int32_t high_bits = static_cast<std::int32_t>(high);
+  std::int32_t value = low_bits | (high_bits << 8);
   if (value >= 32768) {
     value -= 65536;
   }
@@ -37,12 +38,13 @@ std::int16_t decode_i16_le(const std::uint8_t low, const std::uint8_t high) noex
 }
 
 bool finite_calibration(const motion::MotionCalibration &calibration) noexcept {
-  return std::isfinite(calibration.gyro_bias_dps.x) &&
-         std::isfinite(calibration.gyro_bias_dps.y) &&
-         std::isfinite(calibration.gyro_bias_dps.z) &&
-         std::isfinite(calibration.gravity_reference_g) &&
-         std::isfinite(calibration.accel_noise_floor_g) &&
-         std::isfinite(calibration.gyro_noise_floor_dps);
+  const bool finite_bias = std::isfinite(calibration.gyro_bias_dps.x) &&
+                           std::isfinite(calibration.gyro_bias_dps.y) &&
+                           std::isfinite(calibration.gyro_bias_dps.z);
+  const bool finite_scalars = std::isfinite(calibration.gravity_reference_g) &&
+                              std::isfinite(calibration.accel_noise_floor_g) &&
+                              std::isfinite(calibration.gyro_noise_floor_dps);
+  return finite_bias && finite_scalars;
 }
 
 } // namespace
@@ -57,10 +59,8 @@ motion::Vec3 apply_axis_transform(const motion::Vec3 &value,
 }
 
 bool decode_qmi8658_motion_data(const std::uint8_t *data, const std::size_t size,
-                                const std::uint64_t timestamp_us,
-                                const Qmi8658Config &config,
-                                const AxisTransform &transform,
-                                motion::ImuSample &out) noexcept {
+                                const std::uint64_t timestamp_us, const Qmi8658Config &config,
+                                const AxisTransform &transform, motion::ImuSample &out) noexcept {
   if (data == nullptr || size != kQmi8658MotionDataSize || !(config.accel_lsb_per_g > 0.0F) ||
       !(config.gyro_lsb_per_dps > 0.0F) || !std::isfinite(config.accel_lsb_per_g) ||
       !std::isfinite(config.gyro_lsb_per_dps)) {
@@ -220,9 +220,8 @@ std::uint64_t FixedRateGate::period_us() const noexcept {
   return period_us_;
 }
 
-bool can_emit_packet(const SenderMode mode, const bool wifi_connected,
-                     const bool sensor_healthy, const bool calibrated,
-                     const bool features_valid) noexcept {
+bool can_emit_packet(const SenderMode mode, const bool wifi_connected, const bool sensor_healthy,
+                     const bool calibrated, const bool features_valid) noexcept {
   if (!wifi_connected) {
     return false;
   }
@@ -237,8 +236,22 @@ protocol::SyntheticAudioFrame make_diagnostic_frame() noexcept {
   frame.sample_raw = 72.0F;
   frame.sample_smoothed = 64.0F;
   frame.sample_peak = false;
-  frame.bands = {20U, 28U, 40U, 54U, 72U, 96U, 128U, 160U,
-                 160U, 128U, 96U, 72U, 54U, 40U, 28U, 20U};
+  frame.bands[0] = 20U;
+  frame.bands[1] = 28U;
+  frame.bands[2] = 40U;
+  frame.bands[3] = 54U;
+  frame.bands[4] = 72U;
+  frame.bands[5] = 96U;
+  frame.bands[6] = 128U;
+  frame.bands[7] = 160U;
+  frame.bands[8] = 160U;
+  frame.bands[9] = 128U;
+  frame.bands[10] = 96U;
+  frame.bands[11] = 72U;
+  frame.bands[12] = 54U;
+  frame.bands[13] = 40U;
+  frame.bands[14] = 28U;
+  frame.bands[15] = 20U;
   frame.magnitude = 88.0F;
   frame.major_peak = 740.0F;
   return frame;
