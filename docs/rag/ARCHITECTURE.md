@@ -3,11 +3,11 @@
 ## Runtime data flow
 
 ```text
-IMU hardware
-    │
+QMI8658/QMI8658C hardware
+    │ I2C register block
     ▼
-ImuSource adapter
-    │ calibrated accel + gyro + monotonic timestamp
+Qmi8658Adapter + board profile
+    │ calibrated-unit accel + gyro + monotonic timestamp
     ▼
 MotionFeatureExtractor
     │ gravity, linear accel, jerk, angular energy, tilt/orientation, impact state
@@ -18,8 +18,8 @@ SyntheticAudioMapper
 WledAudioSyncV2Encoder
     │ exact 44-byte V2 payload
     ▼
-UdpAudioSyncTransport
-    │ multicast UDP
+WiFiUDP multicast transport
+    │ 239.0.0.1:11988 by default
     ▼
 stock WLED Audio Sync receiver(s)
     │
@@ -27,7 +27,7 @@ stock WLED Audio Sync receiver(s)
 WLED audio-reactive effects
 ```
 
-The project intentionally keeps those stages separable. A packet encoder must be testable with no IMU. A motion mapper must be testable with no Wi-Fi. An IMU adapter must not know anything about WLED packet fields.
+The project intentionally keeps those stages separable. A packet encoder is testable with no IMU. A motion mapper is testable with no Wi-Fi. Sensor conversion/calibration qualification and runtime scheduling have portable test seams, while Arduino `Wire`/`WiFi` code remains at the platform/firmware edge.
 
 ## Module boundaries
 
@@ -43,7 +43,7 @@ Responsibilities:
 
 Must not depend on Arduino, Wi-Fi or a specific IMU.
 
-WU-001 concretely implements this boundary as the portable PlatformIO library `lib/WledImuUdpCore`. `SyntheticAudioFrame` is semantic state; `AudioSyncV2Packet` is the exact 44-byte wire representation. The protocol library contains no Arduino or network dependency. A strict decoder exists for tests and host tooling but is not part of the sender hot path.
+WU-001 implements this boundary as `lib/WledImuUdpCore`. `SyntheticAudioFrame` is semantic state; `AudioSyncV2Packet` is the exact 44-byte wire representation. The protocol library contains no Arduino or network dependency. A strict decoder exists for tests and host tooling but is not part of the sender hot path.
 
 ### `core/motion`
 
@@ -58,9 +58,9 @@ Responsibilities:
 
 Must not know about UDP, WLED packet bytes, Arduino or a specific IMU.
 
-WU-003 concretely implements this boundary as `lib/WledImuUdpMotion`. Its public input is `ImuSample{timestamp_us, accel_g, gyro_dps, valid}`. Its output includes gravity/confidence, linear acceleration, jerk, calibrated gyro/angular speed, normalized gravity orientation, instantaneous/smoothed motion energy, bounded impact state, stillness/confidence and input-valid state.
+WU-003 implements this boundary as `lib/WledImuUdpMotion`. Its public input is `ImuSample{timestamp_us, accel_g, gyro_dps, valid}`. Its output includes gravity/confidence, linear acceleration, jerk, calibrated gyro/angular speed, normalized gravity orientation, instantaneous/smoothed motion energy, bounded impact state, stillness/confidence and input-valid state.
 
-The motion library owns no hardware axis transform and no synthetic-spectrum policy. Hardware adapters must convert raw sensor values into the public calibrated units first; the mapping layer consumes the resulting features afterward.
+The motion library owns no hardware axis transform and no synthetic-spectrum policy. Hardware adapters convert raw sensor values into the public calibrated units first; the mapping layer consumes the resulting features afterward.
 
 Invalid/non-finite or non-monotonic samples are rejected without advancing filter state. The last accepted feature snapshot is returned with `input_valid=false`, making upstream data-quality failures observable without injecting false motion.
 
@@ -75,7 +75,7 @@ Responsibilities:
 - compute coherent synthetic magnitude and major-peak fields;
 - support versioned/tunable mapping profiles without changing protocol code.
 
-WU-004 concretely implements this boundary as `lib/WledImuUdpMapping`. Its accepted MVP profile is `Balanced-v1`:
+WU-004 implements this boundary as `lib/WledImuUdpMapping`. Its accepted MVP profile is `Balanced-v1`:
 
 - bands 0–3: translation;
 - bands 4–7: rotation;
@@ -89,6 +89,21 @@ WU-004 concretely implements this boundary as `lib/WledImuUdpMapping`. Its accep
 
 The exact defaults and center table are authoritative in `MOTION_MAPPING.md` and `WU004_IMPLEMENTATION.md`. The mapping library has no Arduino, Wi-Fi, UDP, QMI8658 or sender-LED dependency.
 
+### `firmware/support`
+
+WU-005 adds portable `lib/WledImuUdpFirmware` for hardware-adjacent policy that still benefits from native tests:
+
+- explicit reference `BoardProfile` and signed/permuted axis transform;
+- reviewable QMI8658 register/scaling constants and pure 12-byte raw decoder;
+- startup calibration qualification around the accepted WU-003 accumulator;
+- multicast defaults and live/diagnostic send-safety gate;
+- bounded reconnect timing policy;
+- 32-bit `micros()` wrap extension to monotonic 64-bit time;
+- fixed-rate gates that skip backlog bursts instead of emitting catch-up packets;
+- a deterministic known diagnostic `SyntheticAudioFrame`.
+
+This library has no Arduino/Wi-Fi/Wire dependency. It may depend on the accepted protocol and motion data models because it is the integration-policy seam between platform adapters and firmware.
+
 ### `platform/imu`
 
 Responsibilities:
@@ -96,35 +111,54 @@ Responsibilities:
 - initialise a physical sensor;
 - read accel/gyro data;
 - expose scale/rate/range metadata;
-- apply hardware-specific register/API behavior and axis transform;
-- feed calibrated `ImuSample` values into the motion core;
-- own the policy that determines when startup calibration samples are trustworthy/stationary.
+- apply hardware-specific register/API behavior and board-axis transform;
+- feed calibrated-unit `ImuSample` values into the motion core;
+- expose hardware errors without inventing motion.
 
-The first adapter is QMI8658/QMI8658C. Future sensors implement the same source contract.
+WU-005 implements `src/qmi8658_adapter.*` as the first Arduino adapter. It uses `TwoWire`, probes the reference `0x6B` address with `0x6A` as a secondary family fallback, verifies `WHO_AM_I=0x05`, writes the locked accel/gyro profile, reads the 12-byte motion block, converts ±8 g and ±1024 dps raw values, and applies the board transform before producing `ImuSample`.
+
+The adapter contains no synthetic-audio mapping, UDP code or sender LED code.
 
 ### `platform/network`
 
 Responsibilities:
 
 - join configured Wi-Fi;
-- send encoded frames to the configured multicast address/port;
+- send already-encoded frames to the configured multicast address/port;
 - expose connection/send diagnostics;
 - recover from temporary disconnection without corrupting core state.
 
-No protocol interpretation belongs here.
+WU-005 uses Arduino `WiFi` station mode plus `WiFiUDP::beginPacketMulticast()`. The platform layer never interprets Audio Sync fields: it receives the exact packet from `WledImuUdpCore` and writes those 44 bytes.
+
+A reconnect attempt is made immediately when needed and then no more often than the configured interval (5 s default). While disconnected, motion processing may continue but packet sends are skipped. A reconnect does not manufacture a frame or reset calibration.
 
 ### `firmware`
 
 Responsibilities:
 
 - fixed-rate scheduling;
-- calibration lifecycle;
+- startup/recalibration lifecycle;
 - configuration loading;
-- wiring adapters to core modules;
+- wiring adapters to accepted core modules;
 - serial diagnostics/status;
 - no required LED output path.
 
-WU-001 supplied a generic ESP32-S3 compile/smoke firmware for protocol encoding. WU-003 added the portable motion core. WU-004 extends the same smoke target through motion→mapping→exact packet encoding using a synthetic stationary sample. It still intentionally does not join Wi-Fi, read a live IMU or initialise LEDs; those platform responsibilities remain deferred to WU-005.
+WU-005 replaces the earlier embedded smoke-only `src/main.cpp` with the reference sender runtime. Live mode executes:
+
+```text
+QMI read -> StartupCalibration / MotionFeatureExtractor -> Balanced-v1 -> encoder -> multicast
+```
+
+Live send eligibility requires Wi-Fi connected, sensor healthy, calibration accepted and a current valid `MotionFeatures` snapshot. A sensor read error clears live eligibility immediately, pauses live packets, schedules re-probe and requires fresh calibration after recovery.
+
+Serial commands are deliberately small:
+
+- `d`: known synthetic diagnostic frame through canonical encoder/network path;
+- `l`: live IMU mode;
+- `r`: fresh stationary calibration;
+- `?`: help.
+
+Diagnostic mode is intentionally allowed to operate without a healthy sensor so network/WLED problems can be isolated. It is explicit user-selected behavior, not a fallback that hides sensor failure.
 
 ### `tools`
 
@@ -133,68 +167,72 @@ Host utilities are part of the compatibility strategy, not optional developer to
 WU-002 implements:
 
 - `lib/WledImuUdpHost`: deterministic packet-pattern generation, CLI parsing, exact packet hex conversion, IPv4 handling and a thin native UDP socket adapter;
-- `src/host_probe.cpp`: the native `host_probe` command with `send`, `listen` and `decode` modes.
+- `src/host_probe.cpp`: native `host_probe` with `send`, `listen` and `decode` modes.
 
-WU-004 adds `src/mapping_probe.cpp`, a separate native inspection executable for representative `still`, `sway`, `spin`, `shake`, `impact`, `tilt-left` and `tilt-right` feature snapshots. It prints the Balanced-v1 semantic frame and exact packet emitted by the canonical WU-001 encoder. CI builds and executes this probe independently of the network host tool.
+WU-004 adds `src/mapping_probe.cpp`, a native inspection executable for representative `still`, `sway`, `spin`, `shake`, `impact`, `tilt-left` and `tilt-right` snapshots. It prints the Balanced-v1 semantic frame and exact packet emitted by the canonical WU-001 encoder.
 
 `WledImuUdpCore` remains the only Audio Sync serializer/decoder. Native tool source files are excluded from the ESP32-S3 source filter so desktop socket/iostream code cannot leak into firmware.
 
-WU-003's reusable synthetic motion-trace fixtures remain test assets, not a runtime dependency of firmware or the host tools.
+WU-003's reusable synthetic motion traces remain test assets, not a runtime dependency of firmware or host tools.
 
 ## Timing model
 
-Product target baseline:
+Accepted WU-005 reference timing:
 
-- IMU acquisition: about 200 Hz where the hardware permits;
+- QMI8658 accel + gyro ODR code `0101`: 224.2 Hz effective in 6-DoF mode;
+- acquisition gate: 4460 us (~224 Hz target);
 - motion feature update: every accepted IMU sample;
-- WLED synthetic-audio frame generation: 50 Hz baseline;
-- UDP send: one V2 packet per generated frame.
+- WLED synthetic-audio frame generation/transmit: configurable, 50 Hz / 20 ms default;
+- bounded serial status: 1 Hz.
 
-WU-002 locks the host network probe to `1..50 Hz`, default 50 Hz, following current WLED Sound Sync guidance not to exceed the approximately 20 ms external-sender cadence.
+WU-003 does not assume a perfect IMU scheduler. Motion state uses supplied monotonic timestamp deltas. WU-005's `MicrosExtender` converts the ESP32 32-bit `micros()` counter to monotonic 64-bit time across wrap before samples reach that core.
 
-WU-003 does not assume a perfect IMU scheduler. Motion state uses accepted monotonic timestamp deltas. Gravity and energy filters use `alpha = dt / (tau + dt)` and cap the filter step at the configured `max_dt_s` (default `0.10 s`) so long scheduler gaps do not cause unbounded state jumps. Non-positive timestamp deltas are rejected rather than coerced.
-
-WU-004 mapping is a deterministic stateful transform over accepted feature snapshots. It does not own scheduler timing; WU-005 will decide when the 200 Hz-class feature stream is sampled/aggregated into the 50 Hz-class mapping/send cadence.
+Fixed-rate gates advance over missed deadlines without issuing a burst of catch-up work. Runtime one-second counters report actual valid sample and successful packet counts; configured target cadence must not be misreported as physical measurement.
 
 ## Determinism
 
-For an identical initial configuration and identical timestamped IMU trace, motion features, synthetic-audio frames and encoded packets must be repeatable on the host test target.
+For identical initial configuration and identical timestamped IMU input, portable motion features, synthetic-audio frames and encoded packets remain repeatable on the host target.
 
-WU-001 enforces deterministic encoding and a directly reviewable golden packet. WU-002 extends that contract to deterministic host patterns and exact-byte transport seams. WU-003 extends it to signal processing with explicit state and timestamp-driven filters.
+WU-001 enforces deterministic encoding and a directly reviewable golden packet. WU-002 extends that contract to deterministic host patterns and exact-byte transport seams. WU-003 extends it to signal processing with explicit state and timestamp-driven filters. WU-004 completes the deterministic feature→mapping→packet chain.
 
-WU-004 completes the current pure-core chain: the shared nine-family WU-003 traces are mapped through Balanced-v1, tests compare semantic distributions and bounded behavior, and two independent extractor/mapper instances must produce byte-identical WU-001 packets for the same fixed trace. Invalid feature snapshots do not advance mapper state or retrigger a peak.
-
-Network delivery/timing remains outside the deterministic signal-processing core. Localhost UDP is tested only for exact byte preservation across the transport seam.
+WU-005 does not make Wi-Fi delivery itself deterministic. It adds deterministic/testable seams around the non-deterministic hardware edge: raw register decode, axis conversion, calibration qualification, timing gates, reconnect eligibility and send safety. Physical I2C/Wi-Fi behavior remains observable runtime evidence.
 
 ## Configuration model
 
 Configuration remains separated into:
 
+- board/sensor profile;
 - Wi-Fi/network settings;
 - sensor calibration/range/rate;
 - motion thresholds/noise floors;
 - synthetic-audio mapping profile;
 - packet rate and multicast destination.
 
-Real credentials must never be committed. WU-001 provides `config/wifi.example.hpp` and ignores `config/wifi.local.hpp`; the example is intentionally unused until transport work begins.
+`config/wifi.example.hpp` is the committed template. `config/wifi.local.hpp` is ignored and may contain real credentials. The example also exposes multicast address/port, packet rate, reconnect interval and diagnostic-on-boot flag so a clean checkout compiles without secrets.
 
-WU-002's host probe takes destination, port, packet rate and diagnostic limits from explicit CLI options. Those host options do not become firmware configuration implicitly.
-
-WU-003 exposes `MotionCalibration` and `MotionConfig`. WU-004 independently exposes `MappingConfig`, so perceptual/profile tuning does not silently mutate motion extraction. Balanced-v1 defaults are documented in `MOTION_MAPPING.md` and `WU004_IMPLEMENTATION.md`.
+If the SSID remains `CHANGE_ME`, firmware intentionally makes no Wi-Fi connection attempt. This keeps CI credential-free without creating a second compile-only firmware path.
 
 ## Failure behavior
 
-- Invalid/non-finite sensor values are rejected before they can alter motion state.
+- Invalid/non-finite sensor values never alter accepted motion state.
 - Non-monotonic timestamps are rejected without state advance.
-- An invalid `MotionFeatures` snapshot preserves the last accepted mapping frame but forces `samplePeak=false`; it does not advance peak-edge state.
-- If the sensor fails, firmware must fail visibly through serial diagnostics and must not emit arbitrary high-energy packets.
-- If Wi-Fi is lost, motion processing may continue but sends are skipped; reconnection must not reset calibration unless explicitly requested.
-- Stillness and sender shutdown must not leave WLED with permanently asserted activity. WU-003 drives motion energy toward quiet; Balanced-v1 maps quiet features to zero spectrum/magnitude and one-frame-only impact peaks.
+- Missing/wrong QMI8658 identity or configuration failure remains visible over serial and is periodically retried.
+- Any runtime sensor-read failure disables live packet eligibility immediately; recovery requires re-probe and fresh calibration.
+- Moving/noisy calibration windows are rejected with an explicit reason and retried.
+- Wi-Fi loss skips sends; motion processing may continue; reconnection does not reset calibration.
+- Live mode cannot send unless sensor/calibration/current-feature gates are all true.
+- Diagnostic mode can intentionally send the fixed known frame with no sensor, but only when selected explicitly.
+- Stillness maps toward zero activity through the accepted motion/mapping semantics.
 
-At the protocol boundary, WU-001 sanitises malformed semantic values before encoding and the strict decoder rejects malformed wire packets. WU-002 exposes those decoder errors through host tooling instead of coercing malformed captures into apparently valid frames. Socket/bind/send/receive failures are observable and return non-zero status.
+At the protocol boundary, WU-001 sanitises semantic values before encoding and the strict decoder rejects malformed wire packets. WU-002 exposes decoder/network errors through host tooling rather than coercing malformed captures.
 
 ## Resource posture
 
-The steady-state embedded hot path should be fixed-size and allocation-free where practical. The protocol payload is 44 bytes; motion and Balanced-v1 mapping state are fixed-size and use no dynamic allocation in their hot paths. The reference ESP32-S3 compile gate exercises the complete pure-core chain.
+The embedded processing path uses fixed-size state and no project-owned steady-state heap allocation:
 
-Native host tooling and test fixtures may use standard-library strings/vectors for diagnostics and fixture construction because they are not part of the embedded runtime. No part of the architecture assumes the sender has addressable LEDs.
+- 12-byte QMI motion read buffer;
+- fixed motion/calibration/mapping state;
+- 44-byte Audio Sync packet;
+- fixed network/config values.
+
+Arduino networking/driver internals may manage their own resources, but WLEDIMUUDP does not allocate strings/vectors/containers per sensor or packet tick. The sender's RGB matrix is absent from the runtime dependency graph.
