@@ -16,6 +16,8 @@ using wledimuudp::firmware::MicrosExtender;
 using wledimuudp::firmware::ReconnectGate;
 using wledimuudp::firmware::SenderMode;
 using wledimuudp::firmware::StartupCalibration;
+using wledimuudp::firmware::can_emit_packet;
+using wledimuudp::firmware::decode_qmi8658_motion_data;
 using wledimuudp::motion::ImuSample;
 using wledimuudp::motion::MotionCalibration;
 
@@ -72,9 +74,10 @@ void test_qmi8658_raw_decode_converts_units_and_axes() {
 
   ImuSample sample{};
   const AxisTransform transform{{1U, 0U, 2U}, {1, -1, 1}};
-  TEST_ASSERT_TRUE(wledimuudp::firmware::decode_qmi8658_motion_data(
-      data.data(), data.size(), 123456U, wledimuudp::firmware::kReferenceQmi8658Config,
-      transform, sample));
+  const auto &config = wledimuudp::firmware::kReferenceQmi8658Config;
+  const bool decoded =
+      decode_qmi8658_motion_data(data.data(), data.size(), 123456U, config, transform, sample);
+  TEST_ASSERT_TRUE(decoded);
   TEST_ASSERT_TRUE(sample.valid);
   TEST_ASSERT_EQUAL_UINT64(123456U, sample.timestamp_us);
   TEST_ASSERT_FLOAT_WITHIN(0.0001F, -0.5F, sample.accel_g.x);
@@ -88,8 +91,8 @@ void test_qmi8658_raw_decode_converts_units_and_axes() {
 void test_qmi8658_raw_decode_rejects_malformed_input() {
   std::array<std::uint8_t, 12> data{};
   ImuSample sample{};
-  TEST_ASSERT_FALSE(wledimuudp::firmware::decode_qmi8658_motion_data(
-      data.data(), 11U, 42U, wledimuudp::firmware::kReferenceQmi8658Config, {}, sample));
+  const auto &config = wledimuudp::firmware::kReferenceQmi8658Config;
+  TEST_ASSERT_FALSE(decode_qmi8658_motion_data(data.data(), 11U, 42U, config, {}, sample));
   TEST_ASSERT_FALSE(sample.valid);
   TEST_ASSERT_EQUAL_UINT64(42U, sample.timestamp_us);
 }
@@ -98,8 +101,11 @@ void test_stationary_startup_calibration_is_accepted() {
   StartupCalibration session;
   for (std::uint64_t index = 0U; index < 256U; ++index) {
     const float dither = (index % 2U == 0U) ? 0.001F : -0.001F;
-    ImuSample sample{index * 4460U + 1U, {dither, 0.0F, 1.0F + dither},
-                     {0.20F + dither, -0.10F, 0.05F}, true};
+    ImuSample sample{};
+    sample.timestamp_us = index * 4460U + 1U;
+    sample.accel_g = {dither, 0.0F, 1.0F + dither};
+    sample.gyro_dps = {0.20F + dither, -0.10F, 0.05F};
+    sample.valid = true;
     TEST_ASSERT_TRUE(session.add(sample));
   }
   TEST_ASSERT_TRUE(session.ready());
@@ -141,16 +147,11 @@ void test_network_defaults_and_send_safety_gate() {
   TEST_ASSERT_EQUAL_UINT16(11988U, network.port);
   TEST_ASSERT_EQUAL_UINT16(50U, network.packet_rate_hz);
 
-  TEST_ASSERT_TRUE(wledimuudp::firmware::can_emit_packet(SenderMode::kLive, true, true, true,
-                                                         true));
-  TEST_ASSERT_FALSE(wledimuudp::firmware::can_emit_packet(SenderMode::kLive, true, false, true,
-                                                          true));
-  TEST_ASSERT_FALSE(wledimuudp::firmware::can_emit_packet(SenderMode::kLive, true, true, false,
-                                                          true));
-  TEST_ASSERT_FALSE(wledimuudp::firmware::can_emit_packet(SenderMode::kLive, false, true, true,
-                                                          true));
-  TEST_ASSERT_TRUE(wledimuudp::firmware::can_emit_packet(SenderMode::kDiagnostic, true, false,
-                                                         false, false));
+  TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kLive, true, true, true, true));
+  TEST_ASSERT_FALSE(can_emit_packet(SenderMode::kLive, true, false, true, true));
+  TEST_ASSERT_FALSE(can_emit_packet(SenderMode::kLive, true, true, false, true));
+  TEST_ASSERT_FALSE(can_emit_packet(SenderMode::kLive, false, true, true, true));
+  TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kDiagnostic, true, false, false, false));
 }
 
 void test_reconnect_gate_is_bounded_and_resets_when_connected() {
