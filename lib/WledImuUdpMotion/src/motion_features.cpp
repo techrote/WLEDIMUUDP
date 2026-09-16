@@ -8,13 +8,13 @@ namespace {
 
 constexpr float kMicrosToSeconds = 1.0e-6F;
 
-Vec3 add(const Vec3 &a, const Vec3 &b) {
+Vec3 add_vec(const Vec3 &a, const Vec3 &b) {
   return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
-Vec3 subtract(const Vec3 &a, const Vec3 &b) {
+Vec3 subtract_vec(const Vec3 &a, const Vec3 &b) {
   return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
-Vec3 scale(const Vec3 &value, const float scalar) {
+Vec3 scale_vec(const Vec3 &value, const float scalar) {
   return {value.x * scalar, value.y * scalar, value.z * scalar};
 }
 
@@ -45,7 +45,7 @@ Vec3 normalise_or_zero(const Vec3 &value) {
   if (!(length > 1.0e-6F) || !std::isfinite(length)) {
     return {};
   }
-  return scale(value, 1.0F / length);
+  return scale_vec(value, 1.0F / length);
 }
 
 } // namespace
@@ -76,7 +76,7 @@ bool CalibrationAccumulator::add(const ImuSample &sample) {
 
   const float accel_magnitude = magnitude(sample.accel_g);
   const float gyro_magnitude = magnitude(sample.gyro_dps);
-  gyro_sum_ = add(gyro_sum_, sample.gyro_dps);
+  gyro_sum_ = add_vec(gyro_sum_, sample.gyro_dps);
   accel_magnitude_sum_ += accel_magnitude;
   accel_magnitude_sq_sum_ += accel_magnitude * accel_magnitude;
   gyro_deviation_sq_sum_ += gyro_magnitude * gyro_magnitude;
@@ -98,7 +98,7 @@ bool CalibrationAccumulator::finalize(MotionCalibration &out) const {
   }
 
   const float count = static_cast<float>(count_);
-  out.gyro_bias_dps = scale(gyro_sum_, 1.0F / count);
+  out.gyro_bias_dps = scale_vec(gyro_sum_, 1.0F / count);
   out.gravity_reference_g = accel_magnitude_sum_ / count;
 
   const float accel_variance = std::max(
@@ -150,7 +150,7 @@ MotionFeatures MotionFeatureExtractor::process(const ImuSample &sample) {
     return rejected;
   }
 
-  const Vec3 corrected_gyro = subtract(sample.gyro_dps, calibration_.gyro_bias_dps);
+  const Vec3 corrected_gyro = subtract_vec(sample.gyro_dps, calibration_.gyro_bias_dps);
 
   if (!initialized_) {
     initialized_ = true;
@@ -179,13 +179,13 @@ MotionFeatures MotionFeatureExtractor::process(const ImuSample &sample) {
   last_timestamp_us_ = sample.timestamp_us;
 
   const float gravity_alpha = low_pass_alpha(dt_s, config_.gravity_time_constant_s);
-  gravity_ = add(gravity_, scale(subtract(sample.accel_g, gravity_), gravity_alpha));
+  gravity_ = add_vec(gravity_, scale_vec(subtract_vec(sample.accel_g, gravity_), gravity_alpha));
 
-  const Vec3 linear = subtract(sample.accel_g, gravity_);
+  const Vec3 linear = subtract_vec(sample.accel_g, gravity_);
   const float linear_magnitude = deadband(magnitude(linear), calibration_.accel_noise_floor_g *
                                                                  config_.accel_deadband_multiplier);
   const float jerk =
-      deadband(magnitude(subtract(linear, previous_linear_)) / std::max(dt_s, 1.0e-6F),
+      deadband(magnitude(subtract_vec(linear, previous_linear_)) / std::max(dt_s, 1.0e-6F),
                config_.jerk_deadband_g_per_s);
   previous_linear_ = linear;
 
