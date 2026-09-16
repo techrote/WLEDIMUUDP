@@ -78,7 +78,7 @@ Defaults:
 - 50 packets/s;
 - reconnect attempt no more often than every 5 s while disconnected.
 
-The firmware uses `WiFiUDP::beginPacketMulticast()` and sends only packets produced by the accepted WU-001 encoder. Wi-Fi loss skips sends but does not mutate motion/calibration state. Reconnection itself cannot manufacture a motion packet.
+The pinned Arduino-ESP32 2.0.16 `WiFiUDP` API sends to the multicast destination with ordinary `beginPacket(multicast_ip, port)` followed by `write()` and `endPacket()`; that framework version does not expose `beginPacketMulticast()`. Multicast is therefore a property of the destination address, not a second WLEDIMUUDP packet path. Only packets produced by the accepted WU-001 encoder are written. Wi-Fi loss skips sends but does not mutate motion/calibration state. Reconnection itself cannot manufacture a motion packet.
 
 Live packet emission requires all of: Wi-Fi connected, sensor healthy, calibration accepted, and a current valid motion feature snapshot. That gate is host-tested. A sensor failure therefore cannot leave a stale high-energy frame streaming.
 
