@@ -11,7 +11,7 @@ Reference IMU: **QMI8658/QMI8658C**
 
 The project version follows semantic `MAJOR.MINOR.PATCH` versioning and is intentionally independent from the wire-protocol and mapper-profile versions. `VERSION`, `kProjectVersion`, `kFirmwareIdentity` and release checks must agree.
 
-A source revision is recorded in the generated release `MANIFEST.txt`. Runtime firmware reports the project/protocol/mapping identities; source revision remains artifact/build provenance rather than a manually maintained source constant that would become stale after squash merges.
+Generated `MANIFEST.txt` records two Git revisions when CI runs a pull request: `source_revision` is the actual PR/source head, while `ci_revision` is the synthetic merge revision GitHub checked out and tested. On a direct `main` push those may be the same revision. Runtime firmware reports project/protocol/mapping identities; Git revision remains artifact/build provenance rather than a manually maintained source constant that would become stale after squash merges.
 
 ## Clean-checkout path
 
@@ -57,10 +57,10 @@ The standard PlatformIO commands remain authoritative; helper scripts are delibe
 | Concern | Release 0.1.0 surface |
 |---|---|
 | Wi-Fi SSID/password | edit `kWifiSsid` / `kWifiPassword` in ignored `wifi.local.hpp` |
-| multicast group | `kMulticastAddress`, default `239.0.0.1` |
-| UDP port | `kMulticastPort`, default `11988` |
-| packet cadence | `kPacketRateHz`, default/max intended `50 Hz` |
-| reconnect cadence | `kReconnectIntervalMs`, default `5000 ms` |
+| multicast group | `kMulticastAddress`, default `239.0.0.1`; template asserts IPv4 multicast range |
+| UDP port | `kMulticastPort`, default `11988`; non-zero assertion |
+| packet cadence | `kPacketRateHz`, default `50 Hz`; template asserts documented `1..50 Hz` range |
+| reconnect cadence | `kReconnectIntervalMs`, default `5000 ms`; non-zero assertion |
 | diagnostic mode on boot | `kDiagnosticModeOnBoot`, default `false` |
 | mapping profile | fixed release default `Balanced-v1`; tunable constants remain in `MappingConfig`, not the credential file |
 | motion profile | accepted WU-003 defaults; not a routine end-user knob surface |
@@ -95,7 +95,7 @@ Status output exposes:
 - configured multicast destination and packet rate;
 - bounded sensor/mapping/network state and counters.
 
-The release artifact manifest records the exact Git source revision used to produce the binary. This avoids embedding a mutable branch/PR SHA in source files while preserving reproducible artifact provenance.
+The release artifact manifest records both the source-head revision and the CI-tested checkout revision. This avoids embedding mutable branch/PR SHAs in source while preserving exact artifact provenance.
 
 ## CI release artifacts
 
@@ -116,7 +116,7 @@ WLEDIMUUDP-0.1.0/
 
 On a non-Linux local host the host executable suffix may differ; the canonical GitHub Actions artifact is produced on Ubuntu and therefore contains Linux host utilities. The firmware binary remains the ESP32-S3 reference build.
 
-`MANIFEST.txt` records project/release/protocol/mapping/board identities, exact source revision, default network target, physical-evidence warning and SHA-256 hashes for the executable/binary payloads.
+`MANIFEST.txt` records project/release/protocol/mapping/board identities, `source_revision`, `ci_revision`, default network target, physical-evidence warning and SHA-256 hashes for the executable/binary payloads. The GitHub artifact name uses the source-head revision so it can be mapped back to the PR commit directly.
 
 Generated build output, `dist/`, `.pio/`, local credentials and virtual environments must never be committed.
 
@@ -126,8 +126,9 @@ Generated build output, `dist/`, `.pio/`, local credentials and virtual environm
 
 - `VERSION` is not simple semantic version syntax;
 - firmware project/identity constants diverge from `VERSION`;
-- the Audio Sync protocol identity changes unexpectedly;
-- the committed safe template loses its `CHANGE_ME` credential sentinels or accepted network defaults;
+- the release schema or Audio Sync protocol identity changes unexpectedly;
+- README, changelog or release-document versions diverge from `VERSION`;
+- the committed safe template loses its `CHANGE_ME` credential sentinels, accepted network defaults, diagnostic default or compile-time network/cadence assertions;
 - `config/wifi.local.hpp` becomes tracked;
 - generated `.pio/`, `dist/` or `.venv/` debris becomes tracked;
 - the required release documentation is missing;
@@ -144,7 +145,7 @@ Before accepting a release-hardening PR:
 3. run the complete native suite;
 4. build/smoke both host tools;
 5. build the ESP32-S3 firmware from a clean checkout with placeholder credentials;
-6. assemble the release bundle and inspect its manifest/content;
+6. assemble the release bundle and inspect its source/CI revisions, manifest/content and payload hashes;
 7. confirm no local credentials or generated output are tracked;
 8. verify stock-WLED source/provenance documentation is still current or re-verify if compatibility assumptions changed;
 9. keep unavailable physical compatibility rows explicitly pending;
