@@ -9,7 +9,7 @@ This document separates two concerns that must remain independently tunable:
 
 The project must never collapse these into one opaque chain of magic constants.
 
-WU-003 locks the first concrete motion-feature baseline. WU-004 now locks the first concrete mapping baseline, **Balanced-v1**. Exact mapping constants and evidence boundaries are also recorded in `docs/rag/WU004_IMPLEMENTATION.md`.
+WU-003 locks the first concrete motion-feature baseline. WU-004 locks the first concrete mapping baseline, **Balanced-v1**. WU-006 validates that baseline across the deterministic integration corpus and retains its constants unchanged pending physical multi-effect evidence. Exact mapping constants and evidence boundaries are also recorded in `docs/rag/WU004_IMPLEMENTATION.md` and `docs/rag/WU006_IMPLEMENTATION.md`.
 
 ## Input sample contract
 
@@ -33,7 +33,7 @@ WU-003 provides `MotionCalibration` plus a stationary `CalibrationAccumulator` c
 - acceleration-magnitude noise floor;
 - gyro residual noise floor.
 
-The default accumulator requires 64 valid finite samples. WU-003 deliberately does not decide how later firmware proves the board is stationary before accepting startup calibration samples.
+The default accumulator requires 64 valid finite samples. WU-005 wraps it in the reference firmware's stricter 256-sample stationary startup qualification and owns the practical retry/recalibration lifecycle.
 
 Calibration must never silently depend on the board’s LEDs or display hardware.
 
@@ -102,6 +102,8 @@ Current feature behavior:
 - outputs remain finite for the deterministic fixture corpus.
 
 Balanced-v1 preserves these semantics at the synthetic-audio layer: stationary level and stationary tilted traces converge to zero raw level, zero spectrum, zero magnitude and quiet major peak; an invalid feature snapshot cannot manufacture a new peak.
+
+WU-006 additionally requires mapper state to keep progressing when Wi-Fi is unavailable so network reconnection cannot delay or replay a transient that happened while offline. Network availability is not a motion or mapping input.
 
 ## Synthetic-audio frame
 
@@ -204,13 +206,30 @@ WU-003 provides reusable deterministic traces for:
 
 WU-004 reuses this corpus directly. The mapper suite locks silence, spectral-class separation, bounded outputs, one-shot peaks, orientation shaping, deterministic configuration and byte-identical mapper→WU-001 encoder behavior.
 
+WU-006 treats this same corpus as the automated end-to-end mapping validation baseline. It covers the issue's stillness, sway, roll, spin, shake, tap/flick and recovery classes without inventing physical observations. The exact matrix and physical pending rows are in `WU006_IMPLEMENTATION.md`.
+
 ## Host inspection
 
 The native `mapping_probe` target accepts:
 
 `still`, `sway`, `spin`, `shake`, `impact`, `tilt-left`, or `tilt-right`.
 
-It prints the Balanced-v1 semantic frame, 16 bands and exact 44-byte Audio Sync V2 packet. This provides a concrete inspection seam before live IMU or network integration.
+It prints the Balanced-v1 semantic frame, 16 bands and exact 44-byte Audio Sync V2 packet. This provides a concrete inspection seam independent of live IMU or network integration.
+
+## WU-006 validation and tuning decision
+
+WU-006 found no deterministic regression or semantic mismatch that justified altering Balanced-v1. In particular:
+
+- stationary level and tilted stillness converge to silence;
+- translation and spin remain strongly separated into their intended groups;
+- shake remains broader/more transient than slow roll;
+- tap produces one one-shot peak;
+- motion→stillness clears level, spectrum, magnitude and peak;
+- all fixture outputs remain finite/bounded;
+- fixed trace→mapper→encoder replay remains byte-identical;
+- an impact processed while Wi-Fi is offline can advance/clear mapper peak state before reconnect, so reconnect itself does not replay the peak.
+
+Because physical stock-WLED hardware is unavailable to the implementation environment, changing gains from source/CI evidence alone would be speculative. The WU-006 result is therefore **retain Balanced-v1 exactly as accepted by WU-004** and leave perceptual tuning explicitly pending physical multi-effect observations.
 
 ## Tuning discipline
 
@@ -224,6 +243,6 @@ A mapping change that “looks better” on one effect may hurt other WLED audio
 
 Motion-core constants are likewise not effect knobs: change them only when feature-level evidence justifies the semantic change.
 
-Balanced-v1 is an automated deterministic baseline, not a claim of final physical perceptual tuning. WU-005/WU-006 own live sensor/network integration and physical stock-WLED evidence.
+Balanced-v1 is an automated deterministic baseline, not a claim of final physical perceptual tuning. Physical stock-WLED evidence must be recorded with exact release/effect/topology provenance rather than inferred from green CI.
 
 The project optimises for expressive stock-WLED interoperability, not acoustic correctness.
