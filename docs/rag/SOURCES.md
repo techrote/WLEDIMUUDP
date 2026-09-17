@@ -4,7 +4,7 @@ This file records the external sources used to establish and re-verify compatibi
 
 ## WLED Audio Reactive source
 
-Originally verified on 2026-09-15 and re-verified for WU-002 on **2026-09-16** against WLED `main` commit:
+Originally verified on 2026-09-15, re-verified for WU-002 on **2026-09-16**, and re-verified for WU-006 on **2026-09-17** against WLED `main` commit:
 
 `06ae26db67107cb3f6a3d107a92340035991a063`
 
@@ -24,9 +24,11 @@ Facts used by this repository include:
 - Audio Sync receive mode disables local sound processing in the relevant receive configuration;
 - WLED includes a network-only sound/input mode.
 
-## Release/documentation snapshot for WU-002
+WU-006 found that WLED `main` had **not moved** from the WU-002 source snapshot. No packet ABI, destination or cadence change was therefore required.
 
-On 2026-09-16 the latest stable GitHub release observed was **WLED v16.0.1**. This is a documentation/source compatibility reference, **not** a physical receiver-validation claim.
+## Release/documentation snapshot
+
+On **2026-09-17** the latest stable GitHub release observed remained **WLED v16.0.1**. This is a documentation/source compatibility reference, **not** a physical receiver-validation claim.
 
 Official WLED documentation consulted:
 
@@ -34,7 +36,7 @@ Official WLED documentation consulted:
 - UDP Realtime / Sound Sync: https://kno.wled.ge/interfaces/udp-realtime/
 - Main WLED repository: https://github.com/wled/WLED
 
-The Sound Sync documentation states that external senders may send more slowly than the approximately 20 ms cadence but should not send faster. WU-002 therefore locks the host probe to a configurable `1..50 Hz` range with 50 Hz default/max.
+The Sound Sync documentation states that external senders may send more slowly than the approximately 20 ms cadence but should not send faster. WU-002 therefore locked the host probe to a configurable `1..50 Hz` range with 50 Hz default/max, and WU-006 retains that contract.
 
 ## WU-005 reference sender hardware provenance
 
@@ -73,19 +75,20 @@ Useful implementation cross-checks inspected during WU-005 include Zephyr's QST 
 
 The selected 4460 us acquisition scheduler corresponds to the documented 224.2 Hz 6-DoF rate. This is a configured target, not a measured physical-rate claim. Runtime one-second counters exist specifically so later physical evidence can record achieved rates.
 
-## Physical evidence boundary
+## WU-006 physical evidence boundary
 
-No physical stock-WLED receiver validation was available during WU-001 through WU-004. WU-005 likewise distinguishes automated firmware compilation/native adapter tests from physical sender validation unless an explicit evidence record is added.
+No physical stock-WLED receiver or reference sender hardware is attached to the WU-006 implementation environment. WU-006 therefore records source re-verification, automated integration semantics and a manual compatibility matrix rather than claiming hardware observations.
 
 Automated byte conformance, deterministic pattern tests, host logic tests and ESP32 compilation cannot establish:
 
 - actual board-axis sign/orientation;
 - live QMI8658 noise/clipping;
 - achieved sample/packet rates;
-- RF/multicast reliability;
-- stock-WLED visual response.
+- RF/multicast reliability or packet-loss behavior;
+- stock-WLED visual response;
+- multi-receiver behavior on a real LAN.
 
-Those claims require named physical hardware, firmware commit, network topology, receiver version/settings and observations.
+Those claims require named physical hardware, firmware commit, network topology, receiver version/settings and observations. See `WU006_IMPLEMENTATION.md` for the pending validation matrix and exact procedure.
 
 ## Re-verification rule
 
