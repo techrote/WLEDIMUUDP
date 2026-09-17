@@ -9,6 +9,9 @@
 
 namespace wledimuudp::firmware {
 
+inline constexpr char kFirmwareIdentity[] = "WLEDIMUUDP-WU006";
+inline constexpr char kProtocolIdentity[] = "AudioSync-V2/00002";
+
 struct AxisTransform {
   std::array<std::uint8_t, 3> source{0U, 1U, 2U};
   std::array<std::int8_t, 3> sign{1, 1, 1};
@@ -148,9 +151,17 @@ enum class SenderMode : std::uint8_t {
   kDiagnostic,
 };
 
+struct SpectrumSummary {
+  std::uint8_t strongest_band{0U};
+  std::uint16_t strongest_value{0U};
+  std::uint32_t band_sum{0U};
+};
+
+bool can_generate_frame(SenderMode mode, bool sensor_healthy, bool calibrated,
+                        bool features_valid) noexcept;
 bool can_emit_packet(SenderMode mode, bool wifi_connected, bool sensor_healthy, bool calibrated,
                      bool features_valid) noexcept;
-
+SpectrumSummary summarize_spectrum(const protocol::SyntheticAudioFrame &frame) noexcept;
 protocol::SyntheticAudioFrame make_diagnostic_frame() noexcept;
 
 } // namespace wledimuudp::firmware

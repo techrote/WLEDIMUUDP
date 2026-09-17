@@ -29,6 +29,8 @@ WLED audio-reactive effects
 
 The project intentionally keeps those stages separable. A packet encoder is testable with no IMU. A motion mapper is testable with no Wi-Fi. Sensor conversion/calibration qualification and runtime scheduling have portable test seams, while Arduino `Wire`/`WiFi` code remains at the platform/firmware edge.
 
+WU-006 makes a further runtime distinction between **frame generation** and **packet emission**. Valid live mapping continues at the fixed packet cadence while Wi-Fi is unavailable; only the network send is skipped. This keeps mapper state independent of reconnect events and prevents a stale one-shot peak from being delayed until reconnection.
+
 ## Module boundaries
 
 ### `core/protocol`
@@ -89,6 +91,8 @@ WU-004 implements this boundary as `lib/WledImuUdpMapping`. Its accepted MVP pro
 
 The exact defaults and center table are authoritative in `MOTION_MAPPING.md` and `WU004_IMPLEMENTATION.md`. The mapping library has no Arduino, Wi-Fi, UDP, QMI8658 or sender-LED dependency.
 
+WU-006 reviews the representative deterministic motion-class evidence and retains Balanced-v1 unchanged. Perceptual tuning against physical stock-WLED effects remains explicitly pending where hardware is unavailable.
+
 ### `firmware/support`
 
 WU-005 adds portable `lib/WledImuUdpFirmware` for hardware-adjacent policy that still benefits from native tests:
@@ -101,6 +105,12 @@ WU-005 adds portable `lib/WledImuUdpFirmware` for hardware-adjacent policy that 
 - 32-bit `micros()` wrap extension to monotonic 64-bit time;
 - fixed-rate gates that skip backlog bursts instead of emitting catch-up packets;
 - a deterministic known diagnostic `SyntheticAudioFrame`.
+
+WU-006 extends this portable seam with:
+
+- explicit firmware/protocol runtime identity;
+- separate `can_generate_frame(...)` and `can_emit_packet(...)` decisions;
+- deterministic bounded spectrum summaries for diagnostics.
 
 This library has no Arduino/Wi-Fi/Wire dependency. It may depend on the accepted protocol and motion data models because it is the integration-policy seam between platform adapters and firmware.
 
@@ -128,9 +138,9 @@ Responsibilities:
 - expose connection/send diagnostics;
 - recover from temporary disconnection without corrupting core state.
 
-WU-005 uses Arduino `WiFi` station mode plus `WiFiUDP::beginPacketMulticast()`. The platform layer never interprets Audio Sync fields: it receives the exact packet from `WledImuUdpCore` and writes those 44 bytes.
+WU-005 uses Arduino `WiFi` station mode plus `WiFiUDP::beginPacket(multicast_ip, port)`, `write()` and `endPacket()`. In the pinned Arduino-ESP32 2.0.16 API used by this repository, multicast is selected by the destination IP; the implementation does **not** use a separate `beginPacketMulticast()` sender path. The platform layer never interprets Audio Sync fields: it receives the exact packet from `WledImuUdpCore` and writes those 44 bytes.
 
-A reconnect attempt is made immediately when needed and then no more often than the configured interval (5 s default). While disconnected, motion processing may continue but packet sends are skipped. A reconnect does not manufacture a frame or reset calibration.
+A reconnect attempt is made immediately when needed and then no more often than the configured interval (5 s default). While disconnected, motion processing and valid frame generation continue but packet sends are skipped. Reconnection itself does not reset calibration, reset mapper state, generate a catch-up burst or manufacture a frame.
 
 ### `firmware`
 
@@ -149,7 +159,16 @@ WU-005 replaces the earlier embedded smoke-only `src/main.cpp` with the referenc
 QMI read -> StartupCalibration / MotionFeatureExtractor -> Balanced-v1 -> encoder -> multicast
 ```
 
-Live send eligibility requires Wi-Fi connected, sensor healthy, calibration accepted and a current valid `MotionFeatures` snapshot. A sensor read error clears live eligibility immediately, pauses live packets, schedules re-probe and requires fresh calibration after recovery.
+WU-006 formalises two runtime gates:
+
+```text
+valid live sensor/calibration/features
+    -> generate/update Balanced-v1 frame at packet cadence
+    -> if Wi-Fi connected, encode/send current frame
+       else skip network send without freezing mapper state
+```
+
+A sensor read error clears live feature/frame eligibility immediately, pauses live generation/transmission, schedules re-probe and requires fresh calibration after recovery. Network loss does not have that semantic effect on core state.
 
 Serial commands are deliberately small:
 
@@ -158,7 +177,9 @@ Serial commands are deliberately small:
 - `r`: fresh stationary calibration;
 - `?`: help.
 
-Diagnostic mode is intentionally allowed to operate without a healthy sensor so network/WLED problems can be isolated. It is explicit user-selected behavior, not a fallback that hides sensor failure.
+Diagnostic mode is intentionally allowed to generate the known frame without a healthy sensor so network/WLED problems can be isolated. Actual packet emission still requires Wi-Fi connectivity. It is explicit user-selected behavior, not a fallback that hides sensor failure.
+
+WU-006 status remains bounded at 1 Hz and exposes firmware/protocol/mapping identity, IMU/calibration/feature state, motion energies, mapped level/peak/spectrum summary, generated/sent rates, Wi-Fi/local IP/target and accumulated error/reconnect counters. High-rate raw IMU logging is not enabled by default.
 
 ### `tools`
 
@@ -177,17 +198,18 @@ WU-003's reusable synthetic motion traces remain test assets, not a runtime depe
 
 ## Timing model
 
-Accepted WU-005 reference timing:
+Accepted reference timing:
 
 - QMI8658 accel + gyro ODR code `0101`: 224.2 Hz effective in 6-DoF mode;
 - acquisition gate: 4460 us (~224 Hz target);
 - motion feature update: every accepted IMU sample;
-- WLED synthetic-audio frame generation/transmit: configurable, 50 Hz / 20 ms default;
+- WLED synthetic-audio frame generation: configurable, 50 Hz / 20 ms default when live state is valid, independent of Wi-Fi state;
+- UDP emission attempt: same packet gate, but only while Wi-Fi is connected;
 - bounded serial status: 1 Hz.
 
 WU-003 does not assume a perfect IMU scheduler. Motion state uses supplied monotonic timestamp deltas. WU-005's `MicrosExtender` converts the ESP32 32-bit `micros()` counter to monotonic 64-bit time across wrap before samples reach that core.
 
-Fixed-rate gates advance over missed deadlines without issuing a burst of catch-up work. Runtime one-second counters report actual valid sample and successful packet counts; configured target cadence must not be misreported as physical measurement.
+Fixed-rate gates advance over missed deadlines without issuing a burst of catch-up work. Runtime one-second counters report actual valid sample, generated-frame and successful-packet counts; configured target cadence must not be misreported as physical measurement.
 
 ## Determinism
 
@@ -195,7 +217,9 @@ For identical initial configuration and identical timestamped IMU input, portabl
 
 WU-001 enforces deterministic encoding and a directly reviewable golden packet. WU-002 extends that contract to deterministic host patterns and exact-byte transport seams. WU-003 extends it to signal processing with explicit state and timestamp-driven filters. WU-004 completes the deterministic feature→mapping→packet chain.
 
-WU-005 does not make Wi-Fi delivery itself deterministic. It adds deterministic/testable seams around the non-deterministic hardware edge: raw register decode, axis conversion, calibration qualification, timing gates, reconnect eligibility and send safety. Physical I2C/Wi-Fi behavior remains observable runtime evidence.
+WU-005 does not make Wi-Fi delivery itself deterministic. It adds deterministic/testable seams around the non-deterministic hardware edge: raw register decode, axis conversion, calibration qualification, timing gates, reconnect eligibility and send safety. WU-006 further proves that network eligibility does not control mapper progression and that an impact peak occurring while offline is not replayed merely because Wi-Fi reconnects.
+
+Physical I2C/Wi-Fi behavior remains observable runtime evidence rather than something CI can assert.
 
 ## Configuration model
 
@@ -217,12 +241,13 @@ If the SSID remains `CHANGE_ME`, firmware intentionally makes no Wi-Fi connectio
 - Invalid/non-finite sensor values never alter accepted motion state.
 - Non-monotonic timestamps are rejected without state advance.
 - Missing/wrong QMI8658 identity or configuration failure remains visible over serial and is periodically retried.
-- Any runtime sensor-read failure disables live packet eligibility immediately; recovery requires re-probe and fresh calibration.
+- Any runtime sensor-read failure disables live frame/send eligibility immediately; recovery requires re-probe and fresh calibration.
 - Moving/noisy calibration windows are rejected with an explicit reason and retried.
-- Wi-Fi loss skips sends; motion processing may continue; reconnection does not reset calibration.
-- Live mode cannot send unless sensor/calibration/current-feature gates are all true.
-- Diagnostic mode can intentionally send the fixed known frame with no sensor, but only when selected explicitly.
+- Wi-Fi loss skips sends but does not freeze valid mapper progression; reconnection does not reset calibration or manufacture/replay a stale peak.
+- Live mode cannot generate unless sensor/calibration/current-feature gates are all true and cannot emit unless Wi-Fi is also connected.
+- Diagnostic mode can intentionally generate the fixed known frame with no sensor, but packet emission still requires Wi-Fi and the mode must be selected explicitly.
 - Stillness maps toward zero activity through the accepted motion/mapping semantics.
+- Receiver absence has no sender-side session state: multicast sends can continue safely with no acknowledgements.
 
 At the protocol boundary, WU-001 sanitises semantic values before encoding and the strict decoder rejects malformed wire packets. WU-002 exposes decoder/network errors through host tooling rather than coercing malformed captures.
 
@@ -232,7 +257,7 @@ The embedded processing path uses fixed-size state and no project-owned steady-s
 
 - 12-byte QMI motion read buffer;
 - fixed motion/calibration/mapping state;
-- 44-byte Audio Sync packet;
+- one fixed current synthetic frame plus a 44-byte Audio Sync packet;
 - fixed network/config values.
 
 Arduino networking/driver internals may manage their own resources, but WLEDIMUUDP does not allocate strings/vectors/containers per sensor or packet tick. The sender's RGB matrix is absent from the runtime dependency graph.

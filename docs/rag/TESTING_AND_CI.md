@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The project must be debuggable without having to wonder simultaneously whether the packet format, network stack, IMU driver and motion mapping are all wrong. Testing is therefore layered deliberately.
+The project must be debuggable without having to wonder simultaneously whether the packet format, network stack, IMU driver and motion mapping are all wrong. Testing is therefore layered deliberately, and automated evidence is never promoted into a physical-hardware claim.
 
 ## Required automated gates
 
@@ -17,80 +17,51 @@ The CI baseline grows with the roadmap and must include:
 
 An implementation issue must not weaken existing gates merely to merge.
 
-## WU-001 accepted gate
+## Accepted automated baseline through WU-005
 
-WU-001 established Python 3.12, PlatformIO Core `6.1.18`, clang-format `18.1.8`, strict formatting, C++17 native Unity tests with `-Wall -Wextra -Wpedantic -Werror`, and the ESP32-S3 reference compile/smoke build. Its accepted suite contains 10 named protocol tests.
+WU-001 established Python 3.12, PlatformIO Core `6.1.18`, clang-format `18.1.8`, strict formatting, C++17 native Unity tests with `-Wall -Wextra -Wpedantic -Werror`, and the ESP32-S3 reference compile/smoke build.
 
-## WU-002 accepted host-probe gate
+WU-002 preserved those gates and added deterministic host probe patterns, CLI validation, exact packet hex/decode coverage, localhost exact-byte UDP loopback, a warning-as-error `host_probe` build and real dry-run smoke invocation.
 
-WU-002 preserved every WU-001 gate and added 10 host-probe/transport tests, deterministic packet patterns, exact ABI reuse, CLI validation, packet hex/decode coverage, localhost exact-byte UDP loopback, a warning-as-error native `host_probe` build, real dry-run CLI execution and preserved ESP32-S3 compilation.
+WU-003 added the deterministic motion-feature corpus and motion-core tests.
 
-WU-002 was squash-merged through PR #9 as `181d1a108a8887bc74008b545b94368fe10725b5`. The accepted baseline therefore contained 20 named native tests before WU-003.
+WU-004 added Balanced-v1 mapping/profile tests plus the warning-as-error `mapping_probe` build/smoke target.
 
-## WU-003 accepted motion-core gate
+WU-005 added the portable hardware/runtime-support tests and upgraded the embedded gate to compile the actual QMI8658 + calibration + motion + mapping + encoder + Arduino Wi-Fi sender runtime.
 
-WU-003 added 11 named native motion tests and an ESP32-S3 smoke use of the portable motion library. The suite verifies the reusable nine-family trace corpus, stationary convergence, tilt without false motion, spin/translation distinction, bounded impact behavior, motion→stillness decay, malformed/stale rejection, calibration, exact replay and deterministic timing-jitter resilience.
+The exact accepted WU-005 PR head was `280ee103cb63a905c487808b2360cd17b5c8b519`. CI run **35161820781** completed successfully on 2026-09-16 with:
 
-WU-003 was squash-merged through PR #10 as `8ef17a102624fff5c9aa26d372d19d4fd04a9638`. The accepted baseline contains 31 named native tests before WU-004.
+- formatting green;
+- **57 native test cases: 57 succeeded, 0 failed**;
+- host probe build/smoke green;
+- mapping probe build/smoke green;
+- ESP32-S3 firmware build green;
+- firmware size reported by that gate: 23,492 bytes RAM usage and 372,717 bytes flash program usage in the pinned build environment.
 
-## WU-004 accepted mapper gate
+PR #12 was subsequently merged to `main` as `41574f11b71f82ee8a2a9dd91f88bc3f12b81c14`, and issue #5 was closed completed.
 
-WU-004 preserved the full WU-001/002/003 gate and added **13 named native mapping tests** plus a second warning-as-error native inspection executable, `mapping_probe`.
+The accepted 57 native tests comprise:
 
-The mapper suite verifies:
+- 10 protocol tests;
+- 10 host/transport tests;
+- 11 motion tests;
+- 13 mapping tests;
+- 13 WU-005 firmware-support tests.
 
-- Balanced-v1 profile identity, configuration defaults and monotonic 16-entry center table;
-- stationary level converges to zero spectrum/level/magnitude and quiet major peak;
-- stationary tilt creates no false level or spectrum;
-- opposite tilts shape existing band energy while preserving identical level;
-- spin and translational sway occupy distinct semantic groups;
-- shake produces stronger higher/transient-band activity than slow roll;
-- tap/impact produces exactly one `samplePeak` rising-edge event and transient spectrum energy;
-- motion followed by stillness clears raw/smoothed activity, spectrum, magnitude and peak;
-- all nine WU-003 trace families remain finite and bounded, with every band `<=254`;
-- `FFT_MajorPeak` tracks the locked synthetic-spectrum centroid;
-- explicit mapping configuration changes are deterministic;
-- two independent fixed trace→motion→mapper chains produce byte-identical WU-001 packets;
-- invalid feature snapshots do not advance mapper peak state or retrigger a peak.
+## WU-006 integration gate
 
-The native `mapping_probe` target exposes representative `still`, `sway`, `spin`, `shake`, `impact`, `tilt-left` and `tilt-right` snapshots. CI builds it with `-Werror` and executes the `spin` preset. This is host inspection evidence, not physical WLED validation.
+WU-006 preserves every inherited gate and adds four portable firmware/integration tests, bringing the expected native suite to **61 tests** before exact merge-gating confirmation.
 
-WU-004 was squash-merged through PR #11 as `75a1e4f988d08905574001e8a6378a0f1120be3e`. Its exact pre-merge gate was CI run `35123755319`; post-merge `main` CI run `35127128137` was also green. The accepted suite contains **44 named native tests**: 10 protocol + 10 host/transport + 11 motion + 13 mapping.
+The new checks lock:
 
-## WU-005 reference-sender gate
+- explicit runtime firmware/protocol identity;
+- frame-generation eligibility independent of Wi-Fi versus packet-emission eligibility requiring Wi-Fi;
+- mapper progression across an offline impact/clear sequence so reconnect does not replay a stale one-shot `samplePeak`;
+- deterministic bounded spectrum summary diagnostics, including clamping values to the protocol band maximum.
 
-WU-005 preserves every accepted WU-001–004 gate and adds **13 named native firmware-support tests**. These tests keep board/sensor policy independently checkable even though Arduino `Wire` and Wi-Fi themselves are compiled only in the embedded target.
+WU-006 also changes the real firmware compile path, so the ESP32-S3 gate must compile the expanded status surface and the generation/send split against the pinned Arduino-ESP32 APIs. Documentation-only evidence is insufficient if that embedded build fails.
 
-The WU-005 suite verifies:
-
-- exact Waveshare ESP32-S3-Matrix SDA/SCL/INT pins, bus rate and reference QMI8658 address;
-- explicit signed/permuted board-axis transform rather than hidden motion-core remapping;
-- reviewable QMI8658 identity/configuration/range/scaling/effective-ODR constants;
-- signed 12-byte raw accel/gyro decoding into g and deg/s plus board-axis transform;
-- malformed sensor-block rejection without a valid `ImuSample`;
-- stationary startup calibration acceptance and gyro-bias/gravity estimation;
-- moving startup calibration rejection;
-- invalid calibration-sample accounting without contaminating the accepted sample count;
-- multicast defaults and live-versus-diagnostic packet-emission safety gates;
-- bounded reconnect attempts and reset behavior after successful connection;
-- monotonic 64-bit microsecond extension across the ESP32 32-bit `micros()` wrap;
-- fixed-rate scheduling that skips missed periods without catch-up bursts;
-- deterministic diagnostic-frame byte identity through the canonical WU-001 encoder, with bounded bands.
-
-The expected combined native suite is **57 named tests**: the accepted 44 plus 13 WU-005 tests. The exact final count must still be taken from the merge-gating CI log; source arithmetic alone is not acceptance evidence.
-
-The embedded CI target now compiles the actual WU-005 runtime rather than a pure-core-only smoke program. A clean checkout compiles:
-
-- Arduino `Wire` QMI8658 adapter;
-- startup/recalibration orchestration;
-- accepted motion and Balanced-v1 mapper chain;
-- canonical 44-byte Audio Sync encoder;
-- Arduino `WiFi` / `WiFiUDP` station/multicast path;
-- bounded reconnect and serial diagnostics;
-- placeholder credential behavior;
-- explicit sensor-independent diagnostic mode.
-
-This remains compilation evidence only. CI has no physical QMI8658 bus, RF environment or WLED receiver.
+The final authoritative WU-006 test count, exact head and CI run belong on PR #13 / issue #6 after the exact merge candidate passes. Do not substitute source arithmetic for that final evidence.
 
 ## Protocol tests
 
@@ -102,17 +73,17 @@ The golden fixture is directly reviewable in source and reused by host tooling.
 
 The WU-002 host sender/decoder keeps packet ABI logic in `WledImuUdpCore` and verifies deterministic known patterns, encode/decode agreement, destination/port/rate parsing, invalid arguments, local UDP exact-byte preservation, malformed-packet rejection, scripted order/count and offline diagnostics.
 
+The host probe is also the first physical receiver/network diagnostic seam: known deterministic traffic should be proved before tuning live IMU behavior.
+
 WU-004's mapper probe is separate from the network probe so mapping inspection does not depend on socket/network behavior.
 
 ## Motion feature trace tests
 
-Pure motion processing uses deterministic synthetic traces for stationary level/tilted, slow roll, translational sway, constant spin, tap/impact, shake, motion-to-stillness decay and malformed/non-finite samples. Fixtures live in `test/fixtures/motion_traces.hpp` and are shared directly with WU-004.
+Pure motion processing uses deterministic synthetic traces for stationary level/tilted, slow roll, translational sway, constant spin, tap/impact, shake, motion-to-stillness decay and malformed/non-finite samples. Fixtures live in `test/fixtures/motion_traces.hpp` and are shared directly with mapping validation.
 
 Feature-level invariants include static tilt without false activity, rotation/translation separation, bounded impact latch/refractory behavior, stillness decay, invalid/stale rejection, finite timing-jitter behavior and deterministic replay. Physical sensor-noise/tap-threshold validation is not implied.
 
 ## Mapping tests
-
-Motion→synthetic-audio testing keeps feature extraction and packet encoding as independent boundaries while exercising the full chain where byte determinism matters.
 
 Balanced-v1 tests lock:
 
@@ -127,41 +98,79 @@ Balanced-v1 tests lock:
 - deterministic configuration and mapper state;
 - exact WU-001 encoder interoperability.
 
-Perceptual quality on real stock WLED effects remains a physical evidence layer.
+WU-006 reviews these tests as the deterministic representative motion-class matrix and deliberately retains Balanced-v1 unchanged because no automated regression or semantic mismatch justifies a tuning change. Perceptual quality on real stock WLED effects remains a separate physical evidence layer.
 
 ## Firmware-support and hardware-adapter tests
 
-`lib/WledImuUdpFirmware` deliberately hosts portable policy/data conversion so native CI can test sensor bytes, axis transforms, calibration qualification, timing and send/reconnect safety with no Arduino dependency.
+`lib/WledImuUdpFirmware` deliberately hosts portable policy/data conversion so native CI can test sensor bytes, axis transforms, calibration qualification, timing, frame/send eligibility and reconnect safety with no Arduino dependency.
 
-`src/qmi8658_adapter.*` contains the actual `TwoWire` transactions and is therefore compile-gated in the ESP32-S3 environment. Native tests exercise its pure raw-decoding/config contract; embedded compilation catches Arduino API/type integration. Physical tests are still required to prove real bus transactions and axis orientation.
+WU-005 coverage locks:
 
-The runtime reports one-second valid IMU-sample and successful-packet counts so WU-006 can compare configured targets with measured hardware behavior. A configured 224.2 Hz QMI8658 6-DoF ODR and 50 Hz packet gate are not themselves proof of achieved physical cadence.
+- Waveshare ESP32-S3-Matrix pins/bus/address profile;
+- explicit signed/permuted board-axis transform;
+- reviewable QMI8658 identity/configuration/range/scaling/effective-ODR constants;
+- signed 12-byte raw accel/gyro decode into g and deg/s;
+- malformed sensor-block rejection;
+- stationary calibration acceptance and moving/invalid-window behavior;
+- multicast defaults and live/diagnostic send safety;
+- bounded reconnect attempts;
+- 64-bit extension across ESP32 `micros()` wrap;
+- fixed-rate scheduling without catch-up bursts;
+- deterministic canonical diagnostic-frame encoding.
+
+WU-006 adds frame-generation/network separation, reconnect peak-state continuity, runtime identity and spectrum-summary checks.
+
+`src/qmi8658_adapter.*` contains the actual `TwoWire` transactions and is compile-gated in the ESP32-S3 environment. Physical tests are still required to prove real bus transactions and axis orientation.
 
 ## Firmware build tests
 
-CI compiles the reference ESP32-S3 environment from a clean checkout using documented dependencies and placeholder credentials.
+CI compiles the reference ESP32-S3 environment from a clean checkout using the pinned toolchain and placeholder credentials.
 
-WU-005 upgrades the former smoke target into the actual reference runtime: direct QMI8658 `Wire` adapter, calibration lifecycle, motion→mapping→encoder path, station Wi-Fi, multicast `WiFiUDP`, reconnect logic and serial diagnostic commands. No sender-LED dependency is compiled or initialised.
+The embedded target includes:
+
+- Arduino `Wire` QMI8658 adapter;
+- startup/recalibration orchestration;
+- accepted motion and Balanced-v1 mapper chain;
+- canonical 44-byte Audio Sync encoder;
+- Arduino `WiFi` / `WiFiUDP` station/multicast path;
+- bounded reconnect and 1 Hz serial diagnostics;
+- placeholder credential behavior;
+- explicit sensor-independent diagnostic mode.
+
+WU-006 additionally requires the embedded compiler to accept the richer status output and continued frame generation during Wi-Fi outage. No sender-LED dependency is compiled or initialised.
 
 Firmware CI needs no real credentials. `CHANGE_ME` compiles but intentionally suppresses Wi-Fi connection attempts. Warnings from project code are defects unless documented and justified.
 
 ## Network behavior tests
 
-Core CI cannot prove multicast delivery across arbitrary infrastructure. WU-002 tests the local host transport seam with a real localhost UDP datagram. WU-005 adds native state tests for multicast defaults, bounded reconnects and packet-emission eligibility, while the embedded target compiles the real Arduino multicast call.
+Core CI cannot prove multicast delivery across arbitrary infrastructure. WU-002 tests the local host transport seam with a real localhost UDP datagram. WU-005 tests multicast defaults, bounded reconnects and packet-emission eligibility while compiling the real Arduino UDP call.
 
-Physical LAN delivery, packet loss, reconnect timing and receiver response remain WU-006 evidence. On firmware sensor failure, the live send gate becomes false immediately; on Wi-Fi loss, sends are skipped. Diagnostic mode is the explicit exception that permits a fixed known frame without live sensor input so transport/receiver faults can be isolated.
+WU-006 locks a key state invariant: network availability controls **emission**, not live mapper progression. During an outage, frames may continue to be generated from valid motion state but packets are skipped rather than queued/retried. Reconnect therefore cannot itself replay an impact peak or create a catch-up burst.
+
+Physical LAN delivery, loss, ordering, AP multicast behavior and multi-receiver behavior remain physical/network evidence. Audio Sync V2 has no WLEDIMUUDP-owned acknowledgement, retransmission or sequence/reordering layer.
 
 ## Stock-WLED interoperability evidence
 
-A real stock-WLED receiver test is a separate evidence layer. Before claiming a receiver version is validated, record exact WLED release/commit, receive/network configuration, sender revision, packet rate/destination, known-pattern result, representative effects, anomalies and network topology.
+A real stock-WLED receiver test is a separate evidence layer. Before claiming a receiver version is validated, record:
 
-WU-001 through WU-005 automated gates establish source/byte/semantic/state/build conformance only unless a separate physical evidence record says otherwise. No live-QMI8658, RF or stock-WLED claim may be inferred from green CI.
+- exact WLED release/build;
+- receive/network configuration;
+- sender/probe commit;
+- packet rate/destination;
+- host known-pattern results;
+- firmware diagnostic-mode result;
+- representative named effects and motion-class observations;
+- anomalies and network topology.
+
+WU-006 re-verified source compatibility on 2026-09-17 against WLED `main` `06ae26db67107cb3f6a3d107a92340035991a063` and stable v16.0.1. No physical receiver is available to the implementation environment, so the matrix in `WU006_IMPLEMENTATION.md` remains explicitly pending rather than inferred from green CI.
 
 ## Performance and resource checks
 
-For the reference firmware, track steady-state timing, dropped/invalid samples, UDP cadence, hot-path allocations, flash/RAM size and reconnect behavior. Hard budgets should follow measurement rather than assumption.
+For the reference firmware, track steady-state timing, dropped/invalid samples, generated frame cadence, successful UDP cadence, hot-path allocations, flash/RAM size and reconnect behavior. Hard budgets should follow measurement rather than assumption.
 
-WU-003 motion, WU-004 mapping and WU-005 portable scheduling/calibration/decoder state are fixed-size and allocation-free in their processing hot paths. The live project-owned loop uses fixed QMI/packet buffers; Arduino networking/driver internals may manage their own resources. Synthetic fixture vectors and desktop tool strings remain host/test assets only.
+Portable motion/mapping/firmware-support state is fixed-size and allocation-free in processing hot paths. The live project-owned loop uses fixed QMI/semantic-frame/packet storage; Arduino networking/driver internals may manage their own resources. Synthetic fixture vectors and desktop tool strings remain host/test assets only.
+
+The bounded 1 Hz WU-006 status line reports actual accepted IMU samples, generated frames and successful packets per window so configured 224.2 Hz / 50 Hz targets can be compared with physical observations later.
 
 ## CI implementation sequence
 
@@ -170,7 +179,8 @@ WU-003 motion, WU-004 mapping and WU-005 portable scheduling/calibration/decoder
 - WU-003: deterministic motion trace tests + embedded motion-core smoke;
 - WU-004: mapping/profile tests + mapper inspection executable build/smoke + embedded full pure-core smoke;
 - WU-005: board/sensor/calibration/scheduling/network-state native tests + actual reference sender build;
-- WU-006+: integration, compatibility and release checks.
+- WU-006: end-to-end observability, frame/send separation and reconnect-state regressions while preserving every inherited gate;
+- WU-007: release/package/setup checks without weakening the integration baseline.
 
 ## Merge evidence
 

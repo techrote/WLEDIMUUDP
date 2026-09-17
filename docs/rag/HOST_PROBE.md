@@ -2,7 +2,7 @@
 
 ## Purpose
 
-WU-002 provides a native host-side interoperability harness for WLED Audio Sync V2. It lets protocol, multicast, receiver configuration and captured packets be tested independently of the future ESP32-S3/QMI8658 sender.
+WU-002 provides a native host-side interoperability harness for WLED Audio Sync V2. It lets protocol, multicast and receiver configuration be tested independently of the ESP32-S3/QMI8658 sender. WU-006 keeps it as the **first receiver/network troubleshooting step** before live IMU behavior is considered.
 
 The host tool always uses the canonical `WledImuUdpCore` encoder/decoder. It does not contain a second packet implementation.
 
@@ -95,23 +95,28 @@ The scripted cycle is exactly ten 16-frame segments in the table order above: si
 
 ## Stock WLED receiver setup
 
-This procedure was source/documentation-verified on **2026-09-16** against:
+This procedure was re-verified on **2026-09-17** against:
 
 - WLED `main` commit `06ae26db67107cb3f6a3d107a92340035991a063`;
 - latest stable GitHub release observed on that date: **v16.0.1**;
 - official Audio Reactive documentation: https://kno.wled.ge/advanced/audio-reactive/;
 - official UDP Realtime / Sound Sync documentation: https://kno.wled.ge/interfaces/udp-realtime/.
 
-No physical WLED receiver was available to the implementation environment, so **v16.0.1 is not yet a physically validated WLEDIMUUDP compatibility claim**.
+WLED `main` had not moved from the WU-002 source snapshot, so the receiver/protocol instructions remain unchanged.
+
+No physical WLED receiver is attached to the WU-006 implementation environment, so **v16.0.1 is source/documentation compatible but is not yet a physically validated WLEDIMUUDP receiver claim**.
 
 For a stock WLED receiver:
 
-1. Put the WLED device and the computer running the probe on a LAN where multicast can pass between them.
-2. Open WLED's Audio Reactive settings.
-3. Configure Audio Sync to **Receive** rather than Send. Surrounding UI wording can vary by release/build, so follow the receive option presented by the installed version rather than relying on a screenshot from another version.
-4. Keep the Audio Sync UDP port at `11988` unless intentionally testing a custom port.
-5. Select an audio-reactive effect on the receiver.
-6. Start with `single-band`, then try `peak-pulse`, `ramp`, and the full `scripted` sequence.
+1. Record the exact WLED release/build before testing.
+2. Put the WLED device and the computer running the probe on a LAN where multicast can pass between them.
+3. Open WLED's Audio Reactive settings.
+4. Configure Audio Sync to **Receive** rather than Send. Surrounding UI wording can vary by release/build, so follow the receive option presented by the installed version rather than relying on a screenshot from another version.
+5. Keep the Audio Sync UDP port at `11988` unless intentionally testing a custom port.
+6. Select an audio-reactive effect on the receiver.
+7. Start with `single-band`, then try `peak-pulse`, `ramp`, and the full `scripted` sequence.
+8. Once the host probe works, test the firmware's serial `d` diagnostic mode. It uses the canonical encoder and normal firmware Wi-Fi/multicast path without depending on live IMU/calibration state.
+9. Only after both known-pattern paths work should `l` live-IMU behavior be used for motion/mapping evaluation.
 
 The canonical default multicast group is `239.0.0.1`; current WLED source joins that group for Audio Sync reception.
 
@@ -121,12 +126,32 @@ If WLED does not react:
 
 1. Run `send --dry-run` first to prove deterministic pattern generation and exact packet encoding without networking.
 2. Confirm the WLED unit is configured to receive Audio Sync and sender/receiver use the same UDP port.
-3. Check host firewall rules for outbound UDP and, when using `listen`, inbound UDP on the selected port.
-4. Check AP/router settings that may suppress multicast, client-to-client traffic, IGMP membership or wireless isolation.
-5. Use `listen` on a suitable second host or a packet capture to confirm `239.0.0.1:11988` traffic is present on the LAN.
-6. Decode captured 44-byte payloads with `decode --hex` or `decode --file` before suspecting the future IMU/motion stack.
+3. Run a real host `single-band` or `scripted` send. If that fails at the receiver, do **not** start tuning the IMU or Balanced-v1 mapping.
+4. Check host firewall rules for outbound UDP and, when using `listen`, inbound UDP on the selected port.
+5. Check AP/router settings that may suppress multicast, client-to-client traffic, IGMP membership or wireless isolation.
+6. Use `listen` on a suitable second host or a packet capture to confirm `239.0.0.1:11988` traffic is present on the LAN.
+7. Decode captured 44-byte payloads with `decode --hex` or `decode --file`.
+8. If host traffic works, switch the ESP32 sender to serial `d`. Failure here points to firmware Wi-Fi/network configuration rather than sensor/motion logic.
+9. If `d` works, return to `l` and inspect the bounded 1 Hz WU-006 status record for IMU health, calibration, features, mapped frame and generated/sent counters.
 
-This order intentionally isolates packet/network/receiver faults before sensor code exists.
+This ordering deliberately localises protocol → LAN/receiver → firmware transport → sensor/mapping faults.
+
+## WU-006 manual validation checklist
+
+When physical hardware is available, record instead of merely checking boxes:
+
+- exact stock-WLED release/build and device;
+- Audio Sync receive settings and UDP port;
+- sender/probe commit;
+- AP/router/network topology;
+- results of `single-band`, `peak-pulse`, `ramp` and `scripted`;
+- firmware diagnostic-mode result;
+- named stock Audio Reactive effects used for live testing;
+- stillness, gentle sway, tilt while moving, slow roll, spin, shake, tap/flick and motion→stillness observations;
+- Wi-Fi loss/reconnect behavior and whether any stale peak/burst appears;
+- second-receiver result if tested.
+
+The canonical pending matrix is in `WU006_IMPLEMENTATION.md`.
 
 ## Automated evidence
 
@@ -134,6 +159,8 @@ WU-002 native coverage includes deterministic generation for every named pattern
 
 CI additionally builds the host executable, runs a real CLI dry-run smoke command and preserves the ESP32-S3 compile gate.
 
+WU-006 retains all of those gates and adds sender diagnostics/reconnect-state regressions. It does not substitute those automated results for a physical receiver test.
+
 ## Evidence boundary
 
-WU-002 proves deterministic packet generation, host CLI behavior, local UDP transport and source-level compatibility with the inspected WLED implementation. It does **not** prove that a particular physical WLED device, Wi-Fi network or effect was tested. Record such evidence only after an actual receiver test, planned primarily for WU-006.
+The host harness proves deterministic packet generation, host CLI behavior, local UDP transport and source-level compatibility with the inspected WLED implementation. It does **not** prove that a particular physical WLED device, Wi-Fi network or effect was tested. Record such evidence only after an actual receiver test with the provenance fields above.

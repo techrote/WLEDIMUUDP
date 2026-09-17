@@ -6,12 +6,14 @@
 
 #include <wledimuudp/audio_sync_v2.hpp>
 #include <wledimuudp/firmware_support.hpp>
+#include <wledimuudp/synthetic_audio_mapper.hpp>
 
 namespace {
 
 using wledimuudp::firmware::AxisTransform;
 using wledimuudp::firmware::CalibrationResult;
 using wledimuudp::firmware::can_emit_packet;
+using wledimuudp::firmware::can_generate_frame;
 using wledimuudp::firmware::decode_qmi8658_motion_data;
 using wledimuudp::firmware::FixedRateGate;
 using wledimuudp::firmware::MicrosExtender;
@@ -26,6 +28,11 @@ void put_i16_le(std::array<std::uint8_t, 12> &data, const std::size_t offset,
   const std::uint16_t bits = static_cast<std::uint16_t>(value);
   data[offset] = static_cast<std::uint8_t>(bits & 0xFFU);
   data[offset + 1U] = static_cast<std::uint8_t>((bits >> 8U) & 0xFFU);
+}
+
+void test_runtime_identity_and_protocol_are_explicit() {
+  TEST_ASSERT_EQUAL_STRING("WLEDIMUUDP-WU006", wledimuudp::firmware::kFirmwareIdentity);
+  TEST_ASSERT_EQUAL_STRING("AudioSync-V2/00002", wledimuudp::firmware::kProtocolIdentity);
 }
 
 void test_reference_board_profile_locks_waveshare_pins() {
@@ -154,6 +161,43 @@ void test_network_defaults_and_send_safety_gate() {
   TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kDiagnostic, true, false, false, false));
 }
 
+void test_frame_generation_is_network_independent_but_emission_is_not() {
+  TEST_ASSERT_TRUE(can_generate_frame(SenderMode::kLive, true, true, true));
+  TEST_ASSERT_FALSE(can_generate_frame(SenderMode::kLive, false, true, true));
+  TEST_ASSERT_FALSE(can_generate_frame(SenderMode::kLive, true, false, true));
+  TEST_ASSERT_FALSE(can_generate_frame(SenderMode::kLive, true, true, false));
+  TEST_ASSERT_TRUE(can_generate_frame(SenderMode::kDiagnostic, false, false, false));
+  TEST_ASSERT_FALSE(can_emit_packet(SenderMode::kLive, false, true, true, true));
+  TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kLive, true, true, true, true));
+}
+
+void test_offline_mapping_progress_prevents_peak_replay_on_reconnect() {
+  wledimuudp::mapping::SyntheticAudioMapper mapper;
+  wledimuudp::motion::MotionFeatures impact{};
+  impact.input_valid = true;
+  impact.impact = true;
+  impact.motion_energy_instant = 1.0F;
+  impact.motion_energy_smoothed = 0.5F;
+  impact.orientation = {0.0F, 0.0F, 1.0F};
+
+  auto quiet = impact;
+  quiet.impact = false;
+  quiet.motion_energy_instant = 0.0F;
+  quiet.motion_energy_smoothed = 0.0F;
+
+  TEST_ASSERT_TRUE(can_generate_frame(SenderMode::kLive, true, true, true));
+  TEST_ASSERT_FALSE(can_emit_packet(SenderMode::kLive, false, true, true, true));
+  const auto offline_peak = mapper.map(impact);
+  TEST_ASSERT_TRUE(offline_peak.sample_peak);
+  const auto offline_clear = mapper.map(quiet);
+  TEST_ASSERT_FALSE(offline_clear.sample_peak);
+
+  TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kLive, true, true, true, true));
+  const auto reconnected = mapper.map(quiet);
+  TEST_ASSERT_FALSE(reconnected.sample_peak);
+  TEST_ASSERT_FLOAT_WITHIN(0.001F, 0.0F, reconnected.sample_raw);
+}
+
 void test_reconnect_gate_is_bounded_and_resets_when_connected() {
   ReconnectGate gate(5000U);
   TEST_ASSERT_TRUE(gate.should_attempt(100U, false));
@@ -181,6 +225,17 @@ void test_fixed_rate_gate_skips_backlog_bursts() {
   TEST_ASSERT_EQUAL_UINT64(5000U, gate.period_us());
 }
 
+void test_spectrum_summary_is_bounded_and_deterministic() {
+  wledimuudp::protocol::SyntheticAudioFrame frame{};
+  frame.bands[2] = 10U;
+  frame.bands[7] = 300U;
+  frame.bands[9] = 20U;
+  const auto summary = wledimuudp::firmware::summarize_spectrum(frame);
+  TEST_ASSERT_EQUAL_UINT8(7U, summary.strongest_band);
+  TEST_ASSERT_EQUAL_UINT16(254U, summary.strongest_value);
+  TEST_ASSERT_EQUAL_UINT32(284U, summary.band_sum);
+}
+
 void test_diagnostic_frame_is_deterministic_and_canonical_encodable() {
   const auto first = wledimuudp::firmware::make_diagnostic_frame();
   const auto second = wledimuudp::firmware::make_diagnostic_frame();
@@ -201,6 +256,7 @@ void tearDown() {}
 
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_runtime_identity_and_protocol_are_explicit);
   RUN_TEST(test_reference_board_profile_locks_waveshare_pins);
   RUN_TEST(test_axis_transform_is_explicit_signed_permutation);
   RUN_TEST(test_reference_qmi8658_configuration_is_reviewable);
@@ -210,9 +266,12 @@ int main() {
   RUN_TEST(test_moving_startup_calibration_is_rejected);
   RUN_TEST(test_invalid_calibration_samples_are_counted_not_accepted);
   RUN_TEST(test_network_defaults_and_send_safety_gate);
+  RUN_TEST(test_frame_generation_is_network_independent_but_emission_is_not);
+  RUN_TEST(test_offline_mapping_progress_prevents_peak_replay_on_reconnect);
   RUN_TEST(test_reconnect_gate_is_bounded_and_resets_when_connected);
   RUN_TEST(test_micros_extender_preserves_monotonic_time_across_wrap);
   RUN_TEST(test_fixed_rate_gate_skips_backlog_bursts);
+  RUN_TEST(test_spectrum_summary_is_bounded_and_deterministic);
   RUN_TEST(test_diagnostic_frame_is_deterministic_and_canonical_encodable);
   return UNITY_END();
 }

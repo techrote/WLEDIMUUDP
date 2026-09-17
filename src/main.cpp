@@ -52,6 +52,7 @@ struct FirmwareCounters {
   std::uint32_t reconnect_attempts{0U};
   std::uint32_t skipped_sends{0U};
   std::uint32_t sensor_samples_window{0U};
+  std::uint32_t packets_generated_window{0U};
   std::uint32_t packets_sent_window{0U};
 };
 
@@ -68,11 +69,13 @@ WiFiUDP udp;
 
 FirmwareCounters counters{};
 MotionFeatures latest_features{};
+wledimuudp::protocol::SyntheticAudioFrame latest_frame{};
 SenderMode sender_mode =
     wledimuudp::config::kDiagnosticModeOnBoot ? SenderMode::kDiagnostic : SenderMode::kLive;
 bool sensor_healthy = false;
 bool calibrated = false;
 bool latest_features_valid = false;
+bool latest_frame_valid = false;
 bool wifi_was_connected = false;
 std::uint64_t next_sensor_probe_us = 0U;
 
@@ -118,12 +121,18 @@ void print_commands() {
   Serial.println("Commands: d=diagnostic pattern, l=live IMU, r=recalibrate, ?=help");
 }
 
+void invalidate_live_state() {
+  latest_features = {};
+  latest_features_valid = false;
+  latest_frame = {};
+  latest_frame_valid = false;
+}
+
 void begin_calibration(const char *reason) {
   calibration.reset();
   motion.reset();
   mapper.reset();
-  latest_features = {};
-  latest_features_valid = false;
+  invalidate_live_state();
   calibrated = false;
   Serial.print("Calibration started: ");
   Serial.print(reason);
@@ -197,7 +206,7 @@ void service_wifi(const std::uint32_t now_ms) {
 void mark_sensor_failed(const std::uint64_t now_us) {
   sensor_healthy = false;
   calibrated = false;
-  latest_features_valid = false;
+  invalidate_live_state();
   mapper.reset();
   next_sensor_probe_us = now_us + kSensorRetryPeriodUs;
   Serial.print("IMU read failed status=");
@@ -287,6 +296,20 @@ void service_sender(const std::uint64_t now_us) {
     return;
   }
 
+  if (!wledimuudp::firmware::can_generate_frame(sender_mode, sensor_healthy, calibrated,
+                                                latest_features_valid)) {
+    latest_frame_valid = false;
+    ++counters.skipped_sends;
+    return;
+  }
+
+  latest_frame = sender_mode == SenderMode::kDiagnostic
+                     ? wledimuudp::firmware::make_diagnostic_frame()
+                     : mapper.map(latest_features);
+  latest_frame_valid = true;
+  ++counters.packets_generated;
+  ++counters.packets_generated_window;
+
   const bool connected = WiFi.status() == WL_CONNECTED;
   if (!wledimuudp::firmware::can_emit_packet(sender_mode, connected, sensor_healthy, calibrated,
                                              latest_features_valid)) {
@@ -294,11 +317,56 @@ void service_sender(const std::uint64_t now_us) {
     return;
   }
 
-  const auto frame = sender_mode == SenderMode::kDiagnostic
-                         ? wledimuudp::firmware::make_diagnostic_frame()
-                         : mapper.map(latest_features);
-  ++counters.packets_generated;
-  transmit_frame(frame);
+  transmit_frame(latest_frame);
+}
+
+void print_feature_status() {
+  if (!latest_features_valid) {
+    Serial.print(" features=invalid");
+    return;
+  }
+
+  Serial.print(" still=");
+  Serial.print(latest_features.still ? "yes" : "no");
+  Serial.print(" still_conf=");
+  Serial.print(latest_features.stillness_confidence, 3);
+  Serial.print(" impact=");
+  Serial.print(latest_features.impact ? "yes" : "no");
+  Serial.print(" energy_raw=");
+  Serial.print(latest_features.motion_energy_instant, 4);
+  Serial.print(" energy_smoothed=");
+  Serial.print(latest_features.motion_energy_smoothed, 4);
+  Serial.print(" accel_g=");
+  Serial.print(latest_features.linear_accel_magnitude_g, 4);
+  Serial.print(" gyro_dps=");
+  Serial.print(latest_features.angular_speed_dps, 2);
+  Serial.print(" jerk_gps=");
+  Serial.print(latest_features.jerk_g_per_s, 2);
+}
+
+void print_frame_status() {
+  if (!latest_frame_valid) {
+    Serial.print(" frame=none");
+    return;
+  }
+
+  const auto spectrum = wledimuudp::firmware::summarize_spectrum(latest_frame);
+  Serial.print(" level_raw=");
+  Serial.print(latest_frame.sample_raw, 2);
+  Serial.print(" level_smoothed=");
+  Serial.print(latest_frame.sample_smoothed, 2);
+  Serial.print(" peak=");
+  Serial.print(latest_frame.sample_peak ? "yes" : "no");
+  Serial.print(" magnitude=");
+  Serial.print(latest_frame.magnitude, 2);
+  Serial.print(" major_peak_hz=");
+  Serial.print(latest_frame.major_peak, 1);
+  Serial.print(" spectrum_peak_band=");
+  Serial.print(spectrum.strongest_band);
+  Serial.print(" spectrum_peak_value=");
+  Serial.print(spectrum.strongest_value);
+  Serial.print(" spectrum_sum=");
+  Serial.print(spectrum.band_sum);
 }
 
 void service_status(const std::uint64_t now_us) {
@@ -306,20 +374,43 @@ void service_status(const std::uint64_t now_us) {
     return;
   }
 
-  Serial.print("status mode=");
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  Serial.print("status fw=");
+  Serial.print(wledimuudp::firmware::kFirmwareIdentity);
+  Serial.print(" protocol=");
+  Serial.print(wledimuudp::firmware::kProtocolIdentity);
+  Serial.print(" mapping=Balanced-v");
+  Serial.print(wledimuudp::mapping::kBalancedProfileVersion);
+  Serial.print(" mode=");
   Serial.print(sender_mode == SenderMode::kDiagnostic ? "diagnostic" : "live");
   Serial.print(" imu=");
   Serial.print(wledimuudp::platform::qmi8658_status_name(imu.status()));
   Serial.print(" calibrated=");
   Serial.print(calibrated ? "yes" : "no");
-  Serial.print(" wifi=");
-  Serial.print(WiFi.status() == WL_CONNECTED ? "connected" : "offline");
   Serial.print(" imu_samples_1s=");
   Serial.print(counters.sensor_samples_window);
-  Serial.print(" packets_sent_1s=");
+  print_feature_status();
+  print_frame_status();
+  Serial.print(" generated_1s=");
+  Serial.print(counters.packets_generated_window);
+  Serial.print(" sent_1s=");
   Serial.print(counters.packets_sent_window);
+  Serial.print(" generated_total=");
+  Serial.print(counters.packets_generated);
   Serial.print(" sent_total=");
   Serial.print(counters.packets_sent);
+  Serial.print(" wifi=");
+  Serial.print(connected ? "connected" : "offline");
+  Serial.print(" local_ip=");
+  if (connected) {
+    Serial.print(WiFi.localIP());
+  } else {
+    Serial.print("none");
+  }
+  Serial.print(" target=");
+  Serial.print(multicast_address());
+  Serial.print(':');
+  Serial.print(wledimuudp::config::kMulticastPort);
   Serial.print(" send_errors=");
   Serial.print(counters.send_errors);
   Serial.print(" sensor_errors=");
@@ -330,6 +421,7 @@ void service_status(const std::uint64_t now_us) {
   Serial.println(counters.skipped_sends);
 
   counters.sensor_samples_window = 0U;
+  counters.packets_generated_window = 0U;
   counters.packets_sent_window = 0U;
 }
 
@@ -339,7 +431,12 @@ void setup() {
   Serial.begin(kSerialBaud);
   delay(100U);
 
-  Serial.println("WLEDIMUUDP WU-005 reference sender");
+  Serial.print("WLEDIMUUDP reference sender fw=");
+  Serial.println(wledimuudp::firmware::kFirmwareIdentity);
+  Serial.print("protocol=");
+  Serial.print(wledimuudp::firmware::kProtocolIdentity);
+  Serial.print(" mapping=Balanced-v");
+  Serial.println(wledimuudp::mapping::kBalancedProfileVersion);
   Serial.print("board=");
   Serial.println(wledimuudp::firmware::kWaveshareEsp32S3Matrix.name);
   Serial.print("QMI8658 I2C SDA=");
