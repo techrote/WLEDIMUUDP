@@ -3,5 +3,6 @@
 __pycache__/
 .vscode/
 config/wifi.local.hpp
+dist/
 *.pyc
 .DS_Store
