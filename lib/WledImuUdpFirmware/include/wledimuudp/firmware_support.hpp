@@ -9,7 +9,9 @@
 
 namespace wledimuudp::firmware {
 
-inline constexpr char kFirmwareIdentity[] = "WLEDIMUUDP-WU006";
+inline constexpr char kProjectVersion[] = "0.1.0";
+inline constexpr std::uint16_t kReleaseSchemaVersion = 1U;
+inline constexpr char kFirmwareIdentity[] = "WLEDIMUUDP/0.1.0";
 inline constexpr char kProtocolIdentity[] = "AudioSync-V2/00002";
 
 struct AxisTransform {
