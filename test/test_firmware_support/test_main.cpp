@@ -6,6 +6,7 @@
 
 #include <wledimuudp/audio_sync_v2.hpp>
 #include <wledimuudp/firmware_support.hpp>
+#include <wledimuudp/synthetic_audio_mapper.hpp>
 
 namespace {
 
@@ -170,6 +171,33 @@ void test_frame_generation_is_network_independent_but_emission_is_not() {
   TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kLive, true, true, true, true));
 }
 
+void test_offline_mapping_progress_prevents_peak_replay_on_reconnect() {
+  wledimuudp::mapping::SyntheticAudioMapper mapper;
+  wledimuudp::motion::MotionFeatures impact{};
+  impact.input_valid = true;
+  impact.impact = true;
+  impact.motion_energy_instant = 1.0F;
+  impact.motion_energy_smoothed = 0.5F;
+  impact.orientation = {0.0F, 0.0F, 1.0F};
+
+  auto quiet = impact;
+  quiet.impact = false;
+  quiet.motion_energy_instant = 0.0F;
+  quiet.motion_energy_smoothed = 0.0F;
+
+  TEST_ASSERT_TRUE(can_generate_frame(SenderMode::kLive, true, true, true));
+  TEST_ASSERT_FALSE(can_emit_packet(SenderMode::kLive, false, true, true, true));
+  const auto offline_peak = mapper.map(impact);
+  TEST_ASSERT_TRUE(offline_peak.sample_peak);
+  const auto offline_clear = mapper.map(quiet);
+  TEST_ASSERT_FALSE(offline_clear.sample_peak);
+
+  TEST_ASSERT_TRUE(can_emit_packet(SenderMode::kLive, true, true, true, true));
+  const auto reconnected = mapper.map(quiet);
+  TEST_ASSERT_FALSE(reconnected.sample_peak);
+  TEST_ASSERT_FLOAT_WITHIN(0.001F, 0.0F, reconnected.sample_raw);
+}
+
 void test_reconnect_gate_is_bounded_and_resets_when_connected() {
   ReconnectGate gate(5000U);
   TEST_ASSERT_TRUE(gate.should_attempt(100U, false));
@@ -239,6 +267,7 @@ int main() {
   RUN_TEST(test_invalid_calibration_samples_are_counted_not_accepted);
   RUN_TEST(test_network_defaults_and_send_safety_gate);
   RUN_TEST(test_frame_generation_is_network_independent_but_emission_is_not);
+  RUN_TEST(test_offline_mapping_progress_prevents_peak_replay_on_reconnect);
   RUN_TEST(test_reconnect_gate_is_bounded_and_resets_when_connected);
   RUN_TEST(test_micros_extender_preserves_monotonic_time_across_wrap);
   RUN_TEST(test_fixed_rate_gate_skips_backlog_bursts);
