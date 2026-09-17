@@ -50,6 +50,9 @@ def main() -> int:
         "kMulticastPort = 11988U",
         "kPacketRateHz = 50U",
         "kReconnectIntervalMs = 5000U",
+        "kDiagnosticModeOnBoot = false",
+        "kPacketRateHz >= 1U && kPacketRateHz <= 50U",
+        "kMulticastAddress[0] >= 224U && kMulticastAddress[0] <= 239U",
     )
     for token in required_config_tokens:
         if token not in config:
