@@ -35,6 +35,8 @@ def main() -> int:
     )
     if f'kProjectVersion[] = "{version}"' not in firmware_header:
         errors.append("firmware kProjectVersion does not match VERSION")
+    if 'kReleaseSchemaVersion = 1U' not in firmware_header:
+        errors.append("release schema identity is missing or changed")
     if f'kFirmwareIdentity[] = "WLEDIMUUDP/{version}"' not in firmware_header:
         errors.append("firmware identity does not include the project VERSION")
     if 'kProtocolIdentity[] = "AudioSync-V2/00002"' not in firmware_header:
@@ -77,6 +79,13 @@ def main() -> int:
     for path in required_docs:
         if not (ROOT / path).is_file():
             errors.append(f"required release document is missing: {path}")
+
+    if f"Current project release: **{version}**" not in read("README.md"):
+        errors.append("README release version does not match VERSION")
+    if f"## {version} —" not in read("CHANGELOG.md"):
+        errors.append("CHANGELOG does not contain the current VERSION entry")
+    if f"Project version: **{version}**" not in read("docs/rag/RELEASE.md"):
+        errors.append("RELEASE.md project version does not match VERSION")
 
     if errors:
         print("release-check: FAILED", file=sys.stderr)
