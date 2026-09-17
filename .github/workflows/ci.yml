@@ -77,7 +77,7 @@ jobs:
           --ci-revision "$GITHUB_SHA"
 
       - name: Upload release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WLEDIMUUDP-${{ steps.release.outputs.version }}-${{ env.SOURCE_REVISION }}
           path: dist/WLEDIMUUDP-${{ steps.release.outputs.version }}
