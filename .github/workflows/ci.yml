@@ -35,6 +35,16 @@ jobs:
       - name: Check release and credential hygiene
         run: python scripts/release_check.py
 
+      - name: Smoke-test safe config initialization
+        shell: bash
+        run: |
+          python scripts/bootstrap.py --init-config
+          cmp config/wifi.example.hpp config/wifi.local.hpp
+          printf '\n// ci-preserve-sentinel\n' >> config/wifi.local.hpp
+          python scripts/bootstrap.py --init-config
+          grep -q 'ci-preserve-sentinel' config/wifi.local.hpp
+          rm config/wifi.local.hpp
+
       - name: Check formatting
         shell: bash
         run: |
