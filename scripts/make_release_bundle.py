@@ -48,11 +48,13 @@ def copy(source: Path, destination: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="dist/WLEDIMUUDP-release")
-    parser.add_argument("--revision", default=os.environ.get("GITHUB_SHA"))
+    parser.add_argument("--revision", default=os.environ.get("SOURCE_REVISION"))
+    parser.add_argument("--ci-revision", default=os.environ.get("GITHUB_SHA"))
     args = parser.parse_args()
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    revision = args.revision or revision_from_git()
+    source_revision = args.revision or revision_from_git()
+    ci_revision = args.ci_revision or source_revision
     output = (ROOT / args.output).resolve()
 
     if output.exists():
@@ -63,14 +65,19 @@ def main() -> int:
     built.append(
         (
             "firmware/firmware.bin",
-            copy(ROOT / ".pio" / "build" / "esp32s3" / "firmware.bin", output / "firmware" / "firmware.bin"),
+            copy(
+                ROOT / ".pio" / "build" / "esp32s3" / "firmware.bin",
+                output / "firmware" / "firmware.bin",
+            ),
         )
     )
 
     host = host_program("host_probe")
     mapper = host_program("mapping_probe")
     suffix = host.suffix
-    built.append((f"tools/host_probe{suffix}", copy(host, output / "tools" / f"host_probe{suffix}")))
+    built.append(
+        (f"tools/host_probe{suffix}", copy(host, output / "tools" / f"host_probe{suffix}"))
+    )
     built.append(
         (f"tools/mapping_probe{suffix}", copy(mapper, output / "tools" / f"mapping_probe{suffix}"))
     )
@@ -87,7 +94,8 @@ def main() -> int:
     manifest = [
         "WLEDIMUUDP release manifest",
         f"version={version}",
-        f"source_revision={revision}",
+        f"source_revision={source_revision}",
+        f"ci_revision={ci_revision}",
         "release_schema=1",
         "protocol=AudioSync-V2/00002",
         "mapping=Balanced-v1",
@@ -103,7 +111,11 @@ def main() -> int:
         manifest.append(f"{sha256(path)}  {relative}")
     (output / "MANIFEST.txt").write_text("\n".join(manifest) + "\n", encoding="utf-8")
 
-    print(f"release-bundle: {output.relative_to(ROOT)} version={version} revision={revision}")
+    print(
+        "release-bundle: "
+        f"{output.relative_to(ROOT)} version={version} "
+        f"source_revision={source_revision} ci_revision={ci_revision}"
+    )
     return 0
 
 
