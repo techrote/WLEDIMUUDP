@@ -65,13 +65,14 @@ Sensor failure remains different from network loss: it immediately invalidates l
 
 ## Balanced-v1 validation decision
 
-WU-006 reviewed the deterministic trace evidence across the representative motion classes required by issue #6:
+WU-006 reviewed the deterministic trace/test evidence across the representative motion classes required by issue #6:
 
 | Motion class | Deterministic evidence | Expected semantic result |
 |---|---|---|
 | stillness | stationary level trace | raw/smoothed level and spectrum decay to zero; no peak |
 | tilted stillness | stationary tilted trace | orientation alone creates no energy |
 | gentle/slow translation | translational sway trace | translation group dominates rotation |
+| tilt while moving | orientation-shaping mapper regression with non-zero motion energy | tilt shifts existing within-group spectrum/major peak without changing raw/smoothed level |
 | slow roll | slow-roll trace | controlled rotational activity, materially below shake transient energy |
 | continuous spin | constant-spin trace | rotation group dominates translation |
 | shake | shake trace | stronger shake/high transient groups than slow roll |
