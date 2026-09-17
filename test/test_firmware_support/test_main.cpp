@@ -31,7 +31,9 @@ void put_i16_le(std::array<std::uint8_t, 12> &data, const std::size_t offset,
 }
 
 void test_runtime_identity_and_protocol_are_explicit() {
-  TEST_ASSERT_EQUAL_STRING("WLEDIMUUDP-WU006", wledimuudp::firmware::kFirmwareIdentity);
+  TEST_ASSERT_EQUAL_STRING("0.1.0", wledimuudp::firmware::kProjectVersion);
+  TEST_ASSERT_EQUAL_UINT16(1U, wledimuudp::firmware::kReleaseSchemaVersion);
+  TEST_ASSERT_EQUAL_STRING("WLEDIMUUDP/0.1.0", wledimuudp::firmware::kFirmwareIdentity);
   TEST_ASSERT_EQUAL_STRING("AudioSync-V2/00002", wledimuudp::firmware::kProtocolIdentity);
 }
 

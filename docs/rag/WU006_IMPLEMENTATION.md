@@ -12,6 +12,8 @@ The implementation environment used for WU-006 has no physical reference sender 
 
 Physical rows remain explicitly pending until someone records the named hardware, WLED version/settings, sender commit, network topology and observations.
 
+WU-007 subsequently promotes this integrated architecture into project release **0.1.0**. That release changes the project/version identity and packaging surface only; it does not change the WU-006 protocol, mapping, reconnect or physical-evidence conclusions below.
+
 ## WLED compatibility re-verification
 
 Re-verified on **2026-09-17**:
@@ -21,18 +23,19 @@ Re-verified on **2026-09-17**:
 - the previously inspected Audio Reactive V2 packet/receiver contract therefore has not changed since WU-002;
 - WLEDIMUUDP retains the canonical 44-byte `00002\0` Audio Sync V2 payload, multicast group `239.0.0.1`, UDP port `11988` and intended maximum sender cadence of 50 Hz.
 
-No packet ABI, destination default or mapping constant is changed by WU-006 merely to create activity.
+No packet ABI, destination default or mapping constant is changed by WU-006 or WU-007 merely to create activity.
 
 ## Runtime identity and bounded diagnostics
 
-The reference firmware now identifies the integration contract at startup and in each bounded status record:
+WU-006 introduced explicit firmware/protocol/mapping identity in each bounded status record. The release-hardening layer now reports:
 
-- firmware integration identity: `WLEDIMUUDP-WU006`;
+- project/firmware identity: `WLEDIMUUDP/0.1.0`;
+- release schema: `1`;
 - protocol identity: `AudioSync-V2/00002`;
 - mapping identity: `Balanced-v1` / profile version `1`;
 - reference board profile and QMI8658 configuration remain those locked by WU-005.
 
-The default status cadence remains **1 Hz**. It intentionally does not print raw IMU samples at acquisition rate.
+The exact source revision is release-artifact provenance in `MANIFEST.txt` rather than a manually maintained source constant. The default status cadence remains **1 Hz** and intentionally does not print raw IMU samples at acquisition rate.
 
 A status record exposes enough state to locate a failure boundary:
 
@@ -46,7 +49,7 @@ A status record exposes enough state to locate a failure boundary:
 - Wi-Fi state and local IP when connected;
 - multicast destination and port;
 - sensor, send, reconnect and skipped-send counters;
-- firmware/protocol/mapping identities.
+- project/protocol/mapping identities.
 
 This makes the main stages independently visible without creating a second diagnostic signal pipeline.
 
@@ -82,7 +85,7 @@ WU-006 reviewed the deterministic trace/test evidence across the representative 
 
 The existing mapper→encoder replay regression also proves byte-identical output for a fixed trace. WU-006 adds an offline/reconnect state regression around the same mapper semantics.
 
-There is no deterministic evidence that justifies changing the Balanced-v1 gains/full-scale constants at this milestone, and no physical stock-WLED receiver is available to supply perceptual counter-evidence. **Balanced-v1 is therefore retained unchanged.** This is a conservative validation decision, not a claim that the profile has been physically tuned across effects.
+There is no deterministic evidence that justifies changing the Balanced-v1 gains/full-scale constants at this milestone, and no physical stock-WLED receiver is available to supply perceptual counter-evidence. **Balanced-v1 is therefore retained unchanged.** WU-007 preserves that decision. This is not a claim that the profile has been physically tuned across effects.
 
 ## Receiver absence, packet loss and ordering
 
@@ -116,7 +119,7 @@ Use the host probe first so receiver/network problems can be separated from live
 
 ## Physical compatibility record
 
-Current state from the WU-006 implementation environment:
+Current state carried into release 0.1.0:
 
 | Validation item | Status | Required evidence before marking passed |
 |---|---|---|
@@ -129,7 +132,7 @@ Current state from the WU-006 implementation environment:
 | multicast packet loss/reordering behavior | **PENDING — network/hardware unavailable** | capture/topology and observed behavior |
 | multiple multicast receivers | **PENDING — receivers unavailable** | receiver versions/topology and simultaneous result |
 
-These pending rows are not release failures under issue #6 because the issue explicitly permits unavailable physical evidence to remain pending when source/host integration, diagnostics, regressions and the manual checklist are complete.
+These pending rows are not release failures because issue #6 explicitly permits unavailable physical evidence to remain pending when source/host integration, diagnostics, regressions and the manual checklist are complete. WU-007 packaging does not change that evidence boundary.
 
 ## Automated WU-006 additions
 
@@ -140,8 +143,8 @@ WU-006 adds portable checks for:
 - deterministic bounded spectrum summarisation;
 - mapper state progression during Wi-Fi loss and absence of stale `samplePeak` replay after reconnect.
 
-All inherited protocol, host-tool, motion, mapping, firmware-support and ESP32-S3 build gates remain required.
+WU-007 updates the project identity assertion to release `0.1.0` while preserving these semantics and all inherited gates.
 
 ## Non-goals retained
 
-WU-006 does not add custom WLED code, ESP-NOW, realtime RGB streaming, sender LED effects, microphone input, retransmission/acknowledgement protocol or effect-specific packet formats.
+Neither WU-006 nor WU-007 adds custom WLED code, ESP-NOW, realtime RGB streaming, sender LED effects, microphone input, retransmission/acknowledgement protocol or effect-specific packet formats.
