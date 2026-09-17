@@ -8,6 +8,8 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -61,12 +63,13 @@ jobs:
         run: >-
           python scripts/make_release_bundle.py
           --output "dist/WLEDIMUUDP-${{ steps.release.outputs.version }}"
-          --revision "$GITHUB_SHA"
+          --revision "$SOURCE_REVISION"
+          --ci-revision "$GITHUB_SHA"
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: WLEDIMUUDP-${{ steps.release.outputs.version }}-${{ github.sha }}
+          name: WLEDIMUUDP-${{ steps.release.outputs.version }}-${{ env.SOURCE_REVISION }}
           path: dist/WLEDIMUUDP-${{ steps.release.outputs.version }}
           if-no-files-found: error
           retention-days: 14
