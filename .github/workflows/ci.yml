@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -21,6 +21,12 @@ jobs:
 
       - name: Install development dependencies
         run: python -m pip install -r requirements-dev.txt
+
+      - name: Check bootstrap dependencies
+        run: python scripts/bootstrap.py --check
+
+      - name: Check release and credential hygiene
+        run: python scripts/release_check.py
 
       - name: Check formatting
         shell: bash
@@ -45,3 +51,15 @@ jobs:
 
       - name: Build ESP32-S3 reference firmware
         run: python -m platformio run -e esp32s3
+
+      - name: Assemble release bundle
+        shell: bash
+        run: python scripts/make_release_bundle.py --output "dist/WLEDIMUUDP-$(cat VERSION)" --revision "$GITHUB_SHA"
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: WLEDIMUUDP-0.1.0-${{ github.sha }}
+          path: dist/WLEDIMUUDP-0.1.0
+          if-no-files-found: error
+          retention-days: 14
