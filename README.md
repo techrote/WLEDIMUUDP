@@ -6,7 +6,7 @@ Its purpose is deliberately narrow: an ESP32-class sender reads an IMU, converts
 
 ## Current implementation state
 
-WU-001 through WU-005 establish the complete reference-sender path:
+WU-001 through WU-006 establish the protocol, host interoperability, deterministic motion/mapping, reference sender and integration/diagnostic path:
 
 - explicit host-testable WLED Audio Sync V2 encoder and strict decoder;
 - direct-review 44-byte golden fixture;
@@ -21,9 +21,14 @@ WU-001 through WU-005 establish the complete reference-sender path:
 - live motion→mapping→canonical 44-byte encoder→Wi-Fi multicast firmware path;
 - secret-safe station-mode Wi-Fi configuration and bounded reconnect behavior;
 - sensor-independent known-frame diagnostic mode for separating network/WLED faults from IMU faults;
+- reconnect-safe mapper progression: Wi-Fi loss skips transmission without freezing mapping state or replaying a stale peak on reconnect;
+- bounded 1 Hz end-to-end status covering sensor, mapper, network and receiver-facing packet state;
+- current stock-WLED receiver setup/troubleshooting and a physical validation matrix that remains explicit where hardware is unavailable;
 - deterministic formatting, native tests and reference ESP32-S3 CI build.
 
-Physical stock-WLED effect validation, board-axis confirmation and perceptual mapping refinement remain WU-006 evidence/tuning work. Green CI is not a physical hardware claim.
+WU-006 re-verified the upstream source snapshot on 2026-09-17: WLED `main` remained `06ae26db67107cb3f6a3d107a92340035991a063` and the latest stable release remained v16.0.1, so the accepted Audio Sync V2 contract/defaults did not change.
+
+Physical stock-WLED effect validation, board-axis confirmation, live sensor-noise/rate measurement and network-specific multicast behavior remain **pending physical evidence**, not inferred from green CI. WU-007 owns release/setup packaging hardening.
 
 ## Quick start
 
@@ -48,7 +53,7 @@ notepad config\wifi.local.hpp
 
 Set `kWifiSsid` and `kWifiPassword`. The default sender target is stock WLED Audio Sync multicast `239.0.0.1:11988` at 50 packets/s; those values are also configurable in the local header. Never commit `config/wifi.local.hpp`.
 
-The WU-005 reference hardware is the Waveshare ESP32-S3-Matrix with onboard QMI8658/QMI8658C. The firmware uses GPIO11 SDA, GPIO12 SCL, 400 kHz I2C and board address `0x6B`. It does **not** initialise or depend on the onboard 8×8 RGB matrix.
+The reference hardware is the Waveshare ESP32-S3-Matrix with onboard QMI8658/QMI8658C. The firmware uses GPIO11 SDA, GPIO12 SCL, 400 kHz I2C and board address `0x6B`. It does **not** initialise or depend on the onboard 8×8 RGB matrix.
 
 ### Build, flash and monitor
 
@@ -60,18 +65,20 @@ python -m platformio run -e esp32s3 -t upload --upload-port <PORT>
 python -m platformio device monitor -p <PORT> -b 115200
 ```
 
-At startup the sender probes/configures the IMU and asks for a stationary calibration window. Keep the board still until serial reports `Calibration accepted`. The firmware reports one-second IMU sample and successful-packet counts so physical scheduling can be verified rather than assumed.
+At startup the sender probes/configures the IMU and asks for a stationary calibration window. Keep the board still until serial reports `Calibration accepted`.
+
+The bounded 1 Hz status line identifies `WLEDIMUUDP-WU006`, `AudioSync-V2/00002` and `Balanced-v1`, then reports IMU/calibration/feature state, motion energy, mapped level/peak/spectrum summary, generated/sent packet rates, Wi-Fi/local IP/target and accumulated errors/reconnects. This is intended to distinguish sensor, mapper, network and receiver-facing failures without high-rate logging.
 
 Runtime serial commands:
 
-- `d` — diagnostic mode: transmit a fixed known synthetic Audio Sync frame without requiring a healthy/calibrated IMU;
+- `d` — diagnostic mode: generate/transmit a fixed known synthetic Audio Sync frame without requiring a healthy/calibrated IMU;
 - `l` — return to live IMU mode;
 - `r` — restart stationary calibration;
 - `?` — print the command summary.
 
-Live transmission is automatically paused on sensor failure, invalid calibration, missing/currently invalid motion features, or Wi-Fi disconnection. Wi-Fi reconnect does not reset accepted motion/calibration state; a sensor failure does require re-probe and fresh calibration.
+Live frame generation requires healthy sensor state, accepted calibration and current valid motion features. Actual UDP emission additionally requires Wi-Fi. During a Wi-Fi outage mapping continues at the packet cadence while sends are skipped, so reconnect does not replay a stale transient or create a catch-up burst. A sensor failure does invalidate live state and requires re-probe plus fresh calibration.
 
-See [`docs/rag/WU005_IMPLEMENTATION.md`](docs/rag/WU005_IMPLEMENTATION.md) for the exact QMI8658 register/range/rate choices and evidence boundary.
+See [`docs/rag/WU005_IMPLEMENTATION.md`](docs/rag/WU005_IMPLEMENTATION.md) for the exact QMI8658 register/range/rate choices and [`docs/rag/WU006_IMPLEMENTATION.md`](docs/rag/WU006_IMPLEMENTATION.md) for the integration diagnostics, receiver checklist and physical evidence boundary.
 
 ## Host compatibility tools
 
@@ -103,7 +110,7 @@ Decode the committed golden packet:
 .\.pio\build\host_probe\program.exe decode --hex "30303030320000000000803f000020400100000102030405060708090a0b0c0d0e0f0000000080410000dc43"
 ```
 
-See [`docs/rag/HOST_PROBE.md`](docs/rag/HOST_PROBE.md) for network probe patterns/listening/receiver setup, and [`docs/rag/WU004_IMPLEMENTATION.md`](docs/rag/WU004_IMPLEMENTATION.md) for the locked Balanced-v1 mapping contract.
+See [`docs/rag/HOST_PROBE.md`](docs/rag/HOST_PROBE.md) for network probe patterns/listening/receiver setup and [`docs/rag/MOTION_MAPPING.md`](docs/rag/MOTION_MAPPING.md) for the Balanced-v1 mapping contract and WU-006 validation decision.
 
 ## Protocol baseline
 
@@ -132,7 +139,7 @@ The project RAG pack lives under [`docs/rag/`](docs/rag/):
 - [`PROJECT.md`](docs/rag/PROJECT.md) — scope, goals, non-goals, terminology.
 - [`ARCHITECTURE.md`](docs/rag/ARCHITECTURE.md) — module boundaries and runtime data flow.
 - [`WLED_AUDIO_SYNC_V2.md`](docs/rag/WLED_AUDIO_SYNC_V2.md) — protocol compatibility contract.
-- [`HOST_PROBE.md`](docs/rag/HOST_PROBE.md) — WU-002 host sender/listener/decoder and receiver setup.
+- [`HOST_PROBE.md`](docs/rag/HOST_PROBE.md) — host sender/listener/decoder and receiver setup.
 - [`MOTION_MAPPING.md`](docs/rag/MOTION_MAPPING.md) — accepted motion and Balanced-v1 synthetic-audio semantics.
 - [`HARDWARE.md`](docs/rag/HARDWARE.md) — reference hardware and portability rules.
 - [`TESTING_AND_CI.md`](docs/rag/TESTING_AND_CI.md) — automated verification and evidence rules.
@@ -143,5 +150,6 @@ The project RAG pack lives under [`docs/rag/`](docs/rag/):
 - [`WU003_IMPLEMENTATION.md`](docs/rag/WU003_IMPLEMENTATION.md) — WU-003 motion-core contract.
 - [`WU004_IMPLEMENTATION.md`](docs/rag/WU004_IMPLEMENTATION.md) — WU-004 Balanced-v1 mapping contract.
 - [`WU005_IMPLEMENTATION.md`](docs/rag/WU005_IMPLEMENTATION.md) — WU-005 board, sensor, scheduling and transport contract.
+- [`WU006_IMPLEMENTATION.md`](docs/rag/WU006_IMPLEMENTATION.md) — WU-006 integration diagnostics, mapping decision and physical validation matrix.
 
 [`AGENTS.md`](AGENTS.md) defines the repository-wide rules for autonomous implementation work.
