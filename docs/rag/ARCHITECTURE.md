@@ -31,6 +31,8 @@ The project intentionally keeps those stages separable. A packet encoder is test
 
 WU-006 makes a further runtime distinction between **frame generation** and **packet emission**. Valid live mapping continues at the fixed packet cadence while Wi-Fi is unavailable; only the network send is skipped. This keeps mapper state independent of reconnect events and prevents a stale one-shot peak from being delayed until reconnection.
 
+WU-007 adds a release layer around this runtime without changing it: version/config sanity, clean-checkout bootstrap, deterministic packaging and exact artifact provenance remain outside the motion/network hot path.
+
 ## Module boundaries
 
 ### `core/protocol`
@@ -64,7 +66,7 @@ WU-003 implements this boundary as `lib/WledImuUdpMotion`. Its public input is `
 
 The motion library owns no hardware axis transform and no synthetic-spectrum policy. Hardware adapters convert raw sensor values into the public calibrated units first; the mapping layer consumes the resulting features afterward.
 
-Invalid/non-finite or non-monotonic samples are rejected without advancing filter state. The last accepted feature snapshot is returned with `input_valid=false`, making upstream data-quality failures observable without injecting false motion.
+Invalid/non-finite or non-monotonic samples are rejected without advancing motion filter state. The last accepted feature snapshot is returned with `input_valid=false`, making upstream data-quality failures observable without injecting false motion.
 
 ### `core/mapping`
 
@@ -91,7 +93,7 @@ WU-004 implements this boundary as `lib/WledImuUdpMapping`. Its accepted MVP pro
 
 The exact defaults and center table are authoritative in `MOTION_MAPPING.md` and `WU004_IMPLEMENTATION.md`. The mapping library has no Arduino, Wi-Fi, UDP, QMI8658 or sender-LED dependency.
 
-WU-006 reviews the representative deterministic motion-class evidence and retains Balanced-v1 unchanged. Perceptual tuning against physical stock-WLED effects remains explicitly pending where hardware is unavailable.
+WU-006 reviews the representative deterministic motion-class evidence and retains Balanced-v1 unchanged. WU-007 preserves that mapping contract; release packaging is not a tuning event. Perceptual tuning against physical stock-WLED effects remains explicitly pending where hardware is unavailable.
 
 ### `firmware/support`
 
@@ -112,7 +114,16 @@ WU-006 extends this portable seam with:
 - separate `can_generate_frame(...)` and `can_emit_packet(...)` decisions;
 - deterministic bounded spectrum summaries for diagnostics.
 
-This library has no Arduino/Wi-Fi/Wire dependency. It may depend on the accepted protocol and motion data models because it is the integration-policy seam between platform adapters and firmware.
+WU-007 stabilises the release identity as:
+
+- project version `0.1.0`;
+- release schema `1`;
+- runtime firmware identity `WLEDIMUUDP/0.1.0`;
+- protocol identity `AudioSync-V2/00002`.
+
+Project version, protocol version and mapping version remain separate contracts. The exact source revision belongs in generated release provenance rather than a manually maintained firmware constant that could go stale after a squash merge.
+
+This library has no Arduino/Wi-Fi/Wire dependency. It may depend on accepted protocol and motion data models because it is the integration-policy seam between platform adapters and firmware.
 
 ### `platform/imu`
 
@@ -179,7 +190,7 @@ Serial commands are deliberately small:
 
 Diagnostic mode is intentionally allowed to generate the known frame without a healthy sensor so network/WLED problems can be isolated. Actual packet emission still requires Wi-Fi connectivity. It is explicit user-selected behavior, not a fallback that hides sensor failure.
 
-WU-006 status remains bounded at 1 Hz and exposes firmware/protocol/mapping identity, IMU/calibration/feature state, motion energies, mapped level/peak/spectrum summary, generated/sent rates, Wi-Fi/local IP/target and accumulated error/reconnect counters. High-rate raw IMU logging is not enabled by default.
+Status remains bounded at 1 Hz and exposes project/protocol/mapping identity, IMU/calibration/feature state, motion energies, mapped level/peak/spectrum summary, generated/sent rates, Wi-Fi/local IP/target and accumulated error/reconnect counters. High-rate raw IMU logging is not enabled by default.
 
 ### `tools`
 
@@ -195,6 +206,20 @@ WU-004 adds `src/mapping_probe.cpp`, a native inspection executable for represen
 `WledImuUdpCore` remains the only Audio Sync serializer/decoder. Native tool source files are excluded from the ESP32-S3 source filter so desktop socket/iostream code cannot leak into firmware.
 
 WU-003's reusable synthetic motion traces remain test assets, not a runtime dependency of firmware or host tools.
+
+### `release/package`
+
+WU-007 adds release support without adding a runtime application layer:
+
+- root `VERSION` is the canonical project-version text;
+- `CHANGELOG.md` records release history and version semantics;
+- `scripts/bootstrap.py` performs dependency inspection and safe non-overwriting local config creation;
+- `scripts/release_check.py` enforces version/config/credential/generated-output repository sanity;
+- `scripts/make_release_bundle.py` assembles already-built firmware/tools/docs and writes exact source/hash provenance;
+- CI uploads the generated bundle only after all inherited verification/build gates pass;
+- `dist/`, `.pio/`, virtual environments and local credentials are ignored generated state, never source.
+
+The release layer may inspect source/build outputs but must not duplicate packet encoding, mapping, IMU or network logic.
 
 ## Timing model
 
@@ -219,22 +244,27 @@ WU-001 enforces deterministic encoding and a directly reviewable golden packet. 
 
 WU-005 does not make Wi-Fi delivery itself deterministic. It adds deterministic/testable seams around the non-deterministic hardware edge: raw register decode, axis conversion, calibration qualification, timing gates, reconnect eligibility and send safety. WU-006 further proves that network eligibility does not control mapper progression and that an impact peak occurring while offline is not replayed merely because Wi-Fi reconnects.
 
+WU-007 makes release assembly deterministic with respect to an already-built source revision: the bundle declares that revision and hashes executable payloads. It does not claim byte-identical toolchain output across arbitrary operating systems/toolchains outside the pinned CI environment.
+
 Physical I2C/Wi-Fi behavior remains observable runtime evidence rather than something CI can assert.
 
 ## Configuration model
 
 Configuration remains separated into:
 
-- board/sensor profile;
-- Wi-Fi/network settings;
-- sensor calibration/range/rate;
-- motion thresholds/noise floors;
-- synthetic-audio mapping profile;
-- packet rate and multicast destination.
+- user-local Wi-Fi/network settings;
+- fixed reference board/sensor profile;
+- accepted sensor calibration/range/rate policy;
+- accepted motion thresholds/noise floors;
+- Balanced-v1 mapping profile/configuration;
+- packet cadence/destination;
+- bounded diagnostic mode/status behavior.
 
-`config/wifi.example.hpp` is the committed template. `config/wifi.local.hpp` is ignored and may contain real credentials. The example also exposes multicast address/port, packet rate, reconnect interval and diagnostic-on-boot flag so a clean checkout compiles without secrets.
+`config/wifi.example.hpp` is the committed template. `config/wifi.local.hpp` is ignored and may contain real credentials. The local header exposes Wi-Fi credentials, multicast address/port, packet rate, reconnect interval and diagnostic-on-boot flag so a clean checkout compiles without secrets.
 
 If the SSID remains `CHANGE_ME`, firmware intentionally makes no Wi-Fi connection attempt. This keeps CI credential-free without creating a second compile-only firmware path.
+
+Release 0.1.0 intentionally does **not** move board axes, motion thresholds or mapping constants into the credential file. Those are semantic/source contracts that require tests and documentation when changed.
 
 ## Failure behavior
 
@@ -248,6 +278,9 @@ If the SSID remains `CHANGE_ME`, firmware intentionally makes no Wi-Fi connectio
 - Diagnostic mode can intentionally generate the fixed known frame with no sensor, but packet emission still requires Wi-Fi and the mode must be selected explicitly.
 - Stillness maps toward zero activity through the accepted motion/mapping semantics.
 - Receiver absence has no sender-side session state: multicast sends can continue safely with no acknowledgements.
+- Missing local credentials do not break compilation; firmware simply does not attempt Wi-Fi connection.
+- Existing local config is never overwritten by the bootstrap helper.
+- Missing release inputs cause packaging/CI failure rather than a partial artifact.
 
 At the protocol boundary, WU-001 sanitises semantic values before encoding and the strict decoder rejects malformed wire packets. WU-002 exposes decoder/network errors through host tooling rather than coercing malformed captures.
 
@@ -261,3 +294,5 @@ The embedded processing path uses fixed-size state and no project-owned steady-s
 - fixed network/config values.
 
 Arduino networking/driver internals may manage their own resources, but WLEDIMUUDP does not allocate strings/vectors/containers per sensor or packet tick. The sender's RGB matrix is absent from the runtime dependency graph.
+
+Release scripts and host tools may use normal desktop filesystem/string allocation because they are not embedded hot-path dependencies.
