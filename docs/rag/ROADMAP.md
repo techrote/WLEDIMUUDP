@@ -2,11 +2,11 @@
 
 ## Planning objective
 
-Build the smallest trustworthy path from physical IMU motion to expressive **stock WLED Audio Reactive behavior** over WLED Audio Sync V2 UDP, while keeping packet compatibility, motion semantics and hardware integration independently testable.
+Build the smallest trustworthy path from physical IMU motion to expressive **stock WLED Audio Reactive behavior** over WLED Audio Sync V2 UDP, while keeping packet compatibility, motion semantics, hardware integration and release packaging independently testable.
 
 ## Plan review findings
 
-The reviewed roadmap deliberately proves one boundary at a time:
+The reviewed roadmap proves one boundary at a time:
 
 1. protocol truth before hardware;
 2. host interoperability tooling as an early product asset;
@@ -14,33 +14,22 @@ The reviewed roadmap deliberately proves one boundary at a time:
 4. static tilt shapes response but never creates activity;
 5. sender LEDs are irrelevant to the product;
 6. UDP Audio Sync V2 is the product transport/receiver contract;
-7. automated conformance is not physical hardware validation.
+7. automated conformance is not physical hardware validation;
+8. release convenience must not hide configuration, provenance or evidence boundaries.
 
 ## Dependency chain
 
 ```text
 WU-001 protocol/core/CI bootstrap
-    │
-    ▼
-WU-002 host Audio Sync probe + stock-WLED conformance tooling
-    │
-    ▼
-WU-003 deterministic motion feature core
-    │
-    ▼
-WU-004 motion → synthetic-spectrum mapper
-    │
-    ▼
-WU-005 ESP32-S3 + QMI8658 reference firmware
-    │
-    ▼
-WU-006 end-to-end stock-WLED integration/tuning
-    │
-    ▼
-WU-007 release hardening and packaging
+    -> WU-002 host Audio Sync probe
+    -> WU-003 deterministic motion core
+    -> WU-004 Balanced-v1 mapper
+    -> WU-005 ESP32-S3 + QMI8658 sender
+    -> WU-006 integration/diagnostics/validation
+    -> WU-007 release hardening/packaging
 ```
 
-The implementation sequence is serial by default so each later issue inherits an accepted `main` baseline.
+WU-007 completes the initial reviewed implementation chain. Future work should begin from the accepted release architecture rather than reopening earlier boundaries without evidence.
 
 ---
 
@@ -48,9 +37,9 @@ The implementation sequence is serial by default so each later issue inherits an
 
 **Issue:** #1  
 **Implementation PR:** #8  
-**Status:** accepted. Squash-merged to `main` as `864242b056830060607592c092c9bce1a9cebdbe`; issue #1 closed completed.
+**Status:** accepted/closed; merged as `864242b056830060607592c092c9bce1a9cebdbe`.
 
-Delivered the portable protocol library, exact explicit 44-byte Audio Sync V2 encoder, strict decoder, golden packet fixtures, pinned toolchain, secret-safe configuration posture, native tests and ESP32-S3 protocol-smoke build.
+Delivered the portable explicit 44-byte Audio Sync V2 encoder/strict decoder, golden fixture, pinned toolchain, safe configuration posture and initial CI/native/ESP32 build substrate.
 
 ---
 
@@ -58,9 +47,9 @@ Delivered the portable protocol library, exact explicit 44-byte Audio Sync V2 en
 
 **Issue:** #2  
 **Implementation PR:** #9  
-**Status:** accepted. Squash-merged to `main` as `181d1a108a8887bc74008b545b94368fe10725b5`; issue #2 closed completed.
+**Status:** accepted/closed; merged as `181d1a108a8887bc74008b545b94368fe10725b5`.
 
-Delivered deterministic Audio Sync patterns, `send`/`listen`/`decode` host tooling, configurable multicast/rate, exact packet hex inspection, POSIX/Winsock UDP, local exact-byte loopback, diagnostics and stock-WLED receive documentation.
+Delivered deterministic host patterns, `send`/`listen`/`decode`, configurable multicast/rate, exact-byte UDP coverage and stock-WLED receive/troubleshooting guidance.
 
 ---
 
@@ -68,9 +57,9 @@ Delivered deterministic Audio Sync patterns, `send`/`listen`/`decode` host tooli
 
 **Issue:** #3  
 **Implementation PR:** #10  
-**Status:** accepted. Squash-merged to `main` as `8ef17a102624fff5c9aa26d372d19d4fd04a9638`; issue #3 closed completed.
+**Status:** accepted/closed; merged as `8ef17a102624fff5c9aa26d372d19d4fd04a9638`.
 
-Delivered portable deterministic motion extraction, calibration primitives, gravity separation, jerk/angular energy, stillness, bounded impact semantics and nine reusable trace families.
+Delivered calibrated timestamped motion processing, gravity separation, jerk/angular activity, stillness, bounded impact semantics and the reusable deterministic trace corpus.
 
 ---
 
@@ -78,96 +67,76 @@ Delivered portable deterministic motion extraction, calibration primitives, grav
 
 **Issue:** #4  
 **Implementation PR:** #11  
-**Status:** accepted. Squash-merged to `main` as `75a1e4f988d08905574001e8a6378a0f1120be3e`; issue #4 closed completed.
+**Status:** accepted/closed; merged as `75a1e4f988d08905574001e8a6378a0f1120be3e`.
 
-Delivered portable **Balanced-v1** mapping, four semantic band groups, orientation shaping without false activity, one-shot packet peak semantics, synthetic magnitude/major peak, deterministic mapper→encoder regressions and native mapper inspection tooling.
+Delivered **Balanced-v1**, four semantic spectrum groups, orientation shaping without false activity, coherent magnitude/major peak, one-shot peak semantics, mapper→encoder regressions and mapper inspection tooling.
 
 ---
 
-## WU-005 — ESP32-S3 + QMI8658/QMI8658C reference sender firmware
+## WU-005 — ESP32-S3 + QMI8658/QMI8658C reference sender
 
 **Issue:** #5  
 **Implementation PR:** #12  
-**Status:** accepted. Final PR head `280ee103cb63a905c487808b2360cd17b5c8b519` passed CI run `35161820781` with **57/57 native tests**, host/mapping probe gates and ESP32-S3 firmware build green. PR #12 merged to `main` as `41574f11b71f82ee8a2a9dd91f88bc3f12b81c14`; issue #5 closed completed.
+**Status:** accepted/closed; merged as `41574f11b71f82ee8a2a9dd91f88bc3f12b81c14`.
 
-### Delivered implementation
+Delivered the explicit Waveshare ESP32-S3-Matrix/QMI8658 profile and adapter, startup calibration, monotonic scheduling, Wi-Fi multicast transport, bounded reconnect behavior, strict live gating, diagnostic mode, secret-safe local configuration and the real ESP32-S3 firmware build gate.
 
-- explicit Waveshare ESP32-S3-Matrix board profile and QMI8658(C) adapter;
-- ±8 g / ±1024 dps reference profile and 224.2 Hz 6-DoF configuration;
-- stationary startup/recalibration qualification;
-- monotonic timestamp extension and fixed-rate scheduling;
-- accepted WU-003 motion + WU-004 Balanced-v1 + WU-001 encoder unchanged;
-- station-mode Wi-Fi, bounded reconnect and multicast Audio Sync V2 at configurable/default `239.0.0.1:11988`, 50 Hz;
-- strict live-send eligibility and sensor-failure re-probe/recalibration behavior;
-- explicit sensor-independent diagnostic mode;
-- one-second valid-sample/successful-send counters;
-- no sender-LED dependency;
-- ignored local credential/config workflow.
-
-### Evidence boundary
-
-WU-005 proves deterministic portable policy and compilation of the real Arduino sender runtime. It does not prove board-axis signs, physical sensor noise/clipping, achieved rates, RF/multicast reliability or stock-WLED visual response.
+Accepted WU-005 exact-head CI contained **57/57 native tests** plus both host-tool gates and the ESP32-S3 build.
 
 ---
 
-## WU-006 — End-to-end stock-WLED integration and mapping validation
+## WU-006 — End-to-end integration, diagnostics and mapping validation
 
 **Issue:** #6  
-**Implementation PR:** #13
+**Implementation PR:** #13  
+**Status:** accepted/closed; merged as `9c86bb9b1d7cac3009534b6b2678ffd85796e767`.
 
-### Delivered architecture
+Delivered:
 
-WU-006 completes the source/host integration layer without inventing unavailable hardware evidence:
+- source-level WLED compatibility re-verification against `main` `06ae26db67107cb3f6a3d107a92340035991a063` and stable v16.0.1;
+- bounded end-to-end runtime observability across sensor, mapping and network boundaries;
+- separate frame-generation and network-emission gates so Wi-Fi loss cannot freeze mapper state;
+- regression proof that reconnect cannot replay a stale impact peak;
+- receiver absence/loss/order/multicast assumptions documented without proprietary reliability extensions;
+- current stock-WLED setup/troubleshooting and explicit manual physical-validation procedure;
+- retained Balanced-v1 constants because deterministic evidence did not justify speculative retuning;
+- physical board/receiver/effect/network rows explicitly left pending where hardware was unavailable.
 
-- re-verifies WLED compatibility against unchanged `main` commit `06ae26db67107cb3f6a3d107a92340035991a063` and stable v16.0.1;
-- retains the accepted Audio Sync V2 ABI/defaults and Balanced-v1 constants;
-- adds explicit firmware/protocol/mapping identity to runtime diagnostics;
-- expands bounded 1 Hz status to show IMU/calibration/feature state, motion energy, mapped level/peak/spectrum, generated/sent rates, Wi-Fi/local IP/target and error/reconnect counters;
-- separates frame generation from network emission so Wi-Fi outage does not freeze mapper state;
-- proves by regression that reconnect cannot replay an impact peak processed while offline;
-- documents receiver absence, UDP loss/ordering posture and multi-receiver expectations without adding a proprietary reliability layer;
-- provides a current stock-WLED setup/troubleshooting sequence and exact manual physical-validation checklist;
-- records physical reference-board/receiver/effect/network rows as **pending** because that hardware is unavailable to the implementation environment;
-- reconciles stale architecture/CI/provenance documentation, including the accepted Arduino `WiFiUDP::beginPacket(multicast_ip, port)` sender path.
-
-### Mapping decision
-
-The representative deterministic corpus covers stillness, tilted stillness, sway, roll, spin, shake, tap/impact, motion→stillness recovery and malformed input. Those regressions remain semantically coherent and byte-deterministic, so WU-006 does **not** retune Balanced-v1 from source/CI evidence alone. Perceptual multi-effect tuning remains a physical evidence item.
-
-### Acceptance evidence rule
-
-PR #13 may merge only after its exact final head passes the complete inherited formatting/native/tool/ESP32-S3 CI gate. The exact final head/run and merge result are recorded on PR #13 and issue #6 after they exist; this roadmap intentionally does not guess mutable merge evidence.
+Final PR head `065fe53f8d9fd6bb09c8db6cdecf9155d4a13276` passed CI run `35170559063`: formatting, **61/61 native tests**, both host-tool build/smoke gates and ESP32-S3 firmware build.
 
 ---
 
 ## WU-007 — Release hardening, setup UX and reproducible packaging
 
-**Issue:** #7
+**Issue:** #7  
+**Implementation PR:** #14
 
-### Goal
+WU-007 turns the accepted engineering baseline into project release **0.1.0** without redesigning protocol, motion or mapping semantics.
 
-Make the project easy to build, flash, configure and troubleshoot without repository archaeology.
+### Delivered release architecture
 
-### Deliverables
+- canonical root `VERSION` plus firmware `WLEDIMUUDP/0.1.0` identity and release-schema version;
+- semantic project-version convention kept independent from `AudioSync-V2/00002` and `Balanced-v1`;
+- dependency-free `scripts/bootstrap.py` for safe, non-overwriting local config initialization and pinned dependency checks;
+- `scripts/release_check.py` for version/config/template/ignore/generated-debris sanity;
+- clean-checkout README with exact install, test, build, flash, monitor and host-probe-first troubleshooting sequence;
+- explicit first-release configuration surface and fixed-versus-user-configurable distinctions;
+- `CHANGELOG.md` plus `docs/rag/RELEASE.md` release/package/checklist contract;
+- deterministic release-bundle builder containing firmware, Linux host tools, safe config and documentation;
+- manifest carrying exact source revision, independent protocol/mapping/board identities and SHA-256 payload hashes;
+- CI release artifact upload only after the inherited format/native/tool/ESP32 build gates succeed;
+- generated `.pio/` / `dist/` output and local credentials excluded from source control;
+- physical compatibility boundaries retained exactly rather than promoted by packaging.
 
-- documented build/flash workflow;
-- setup/bootstrap scripts where useful;
-- stable configuration template and credential instructions;
-- version/compatibility reporting;
-- release checklist/changelog convention;
-- host tools documented/packaged alongside firmware;
-- CI release artifacts if appropriate;
-- final RAG reconciliation and compatibility matrix.
+### Acceptance evidence rule
 
-### Exit condition
-
-A new user can go from clean checkout to a running sender and stock-WLED receiver using repository documentation alone, while any still-unavailable physical compatibility rows remain labelled accurately rather than fabricated.
+Exact final PR head, final CI run, artifact inventory/hash evidence, merge result and issue closure belong on PR #14 / issue #7 once the exact merge candidate passes. This roadmap deliberately avoids guessing a mutable squash SHA.
 
 ---
 
 ## Deferred backlog
 
-Outside the initial chain unless a future issue changes scope:
+Outside the initial release unless a future issue changes scope:
 
 - captive-portal/web provisioning;
 - additional IMU adapters;
@@ -179,6 +148,6 @@ Outside the initial chain unless a future issue changes scope:
 - ESPsand integration;
 - WLED fork/usermod.
 
-## Roadmap completion rule
+## Post-roadmap rule
 
-Each WU issue is implemented autonomously from current `main` using its issue body plus the RAG pack. Every implementation issue must complete code, tests, documentation reconciliation, PR/CI repair, merge verification and issue closure rather than stopping at a plan or draft PR.
+Any future change should preserve the established evidence hierarchy: deterministic host-testable core behavior, explicit platform adapters, stock-WLED protocol compatibility, safe local configuration, reproducible packaging, and a strict distinction between automated/source evidence and physical validation.
