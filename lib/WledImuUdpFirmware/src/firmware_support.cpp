@@ -220,15 +220,30 @@ std::uint64_t FixedRateGate::period_us() const noexcept {
   return period_us_;
 }
 
-bool can_emit_packet(const SenderMode mode, const bool wifi_connected, const bool sensor_healthy,
-                     const bool calibrated, const bool features_valid) noexcept {
-  if (!wifi_connected) {
-    return false;
-  }
+bool can_generate_frame(const SenderMode mode, const bool sensor_healthy, const bool calibrated,
+                        const bool features_valid) noexcept {
   if (mode == SenderMode::kDiagnostic) {
     return true;
   }
   return sensor_healthy && calibrated && features_valid;
+}
+
+bool can_emit_packet(const SenderMode mode, const bool wifi_connected, const bool sensor_healthy,
+                     const bool calibrated, const bool features_valid) noexcept {
+  return wifi_connected && can_generate_frame(mode, sensor_healthy, calibrated, features_valid);
+}
+
+SpectrumSummary summarize_spectrum(const protocol::SyntheticAudioFrame &frame) noexcept {
+  SpectrumSummary summary{};
+  for (std::size_t index = 0U; index < frame.bands.size(); ++index) {
+    const std::uint16_t value = std::min<std::uint16_t>(frame.bands[index], 254U);
+    summary.band_sum += value;
+    if (value > summary.strongest_value) {
+      summary.strongest_value = value;
+      summary.strongest_band = static_cast<std::uint8_t>(index);
+    }
+  }
+  return summary;
 }
 
 protocol::SyntheticAudioFrame make_diagnostic_frame() noexcept {
